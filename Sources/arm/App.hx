@@ -1,236 +1,250 @@
 package arm;
 
+import haxe.io.Bytes;
 import kha.graphics2.truetype.StbTruetype;
 import kha.Image;
 import kha.Font;
 import kha.System;
 import zui.Zui;
-import zui.Zui.Handle;
 import zui.Themes;
 import zui.Nodes;
 import iron.Scene;
 import iron.data.Data;
 import iron.system.Input;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
+import arm.ui.UIToolbar;
 import arm.ui.UINodes;
 import arm.ui.UIView2D;
 import arm.ui.UIMenu;
 import arm.ui.UIBox;
 import arm.ui.UIFiles;
-import arm.io.Importer;
-import arm.util.Path;
+import arm.ui.UIHeader;
+import arm.ui.UIStatus;
+import arm.ui.UIMenubar;
+import arm.ui.TabLayers;
+import arm.ui.BoxExport;
+import arm.io.ImportAsset;
+import arm.io.ExportMesh;
+import arm.io.ExportTexture;
+import arm.sys.File;
+import arm.sys.Path;
 import arm.util.RenderUtil;
 import arm.util.ViewportUtil;
 import arm.data.MaterialSlot;
+import arm.data.LayerSlot;
 import arm.data.ConstData;
 import arm.plugin.Camera;
-import arm.Config;
-import arm.Tool;
-import arm.Project;
-using StringTools;
+import arm.node.MaterialParser;
+import arm.Enums;
+import arm.ProjectFormat;
+import arm.Res;
 
 class App {
 
-	public static var version = "0.7";
-	static var appx = 0;
-	static var appy = 0;
-	static var winw = 0;
-	static var winh = 0;
-	public static var uienabled = true;
+	public static var uiEnabled = true;
 	public static var isDragging = false;
 	public static var isResizing = false;
-	public static var dragMaterial:MaterialSlot = null;
-	public static var dragAsset:TAsset = null;
+	public static var dragMaterial: MaterialSlot = null;
+	public static var dragLayer: LayerSlot = null;
+	public static var dragAsset: TAsset = null;
+	public static var dragFile: String = null;
+	public static var dragTint = 0xffffffff;
+	public static var dragRect: TRect = null;
 	public static var dragOffX = 0.0;
 	public static var dragOffY = 0.0;
-	public static var dropPath = "";
 	public static var dropX = 0.0;
 	public static var dropY = 0.0;
-	public static var font:Font = null;
-	public static var theme:TTheme;
-	public static var color_wheel:Image;
-	public static var uibox:Zui;
-	public static var fileArg = "";
-	public static var saveAndQuit = false;
+	public static var font: Font = null;
+	public static var theme: TTheme;
+	public static var colorWheel: Image;
+	public static var uiBox: Zui;
+	public static var uiMenu: Zui;
+	public static var defaultElementH = 28;
+	public static var resHandle = new Handle({position: Res2048});
+	public static var bitsHandle = new Handle();
+	static var dropPaths: Array<String> = [];
+	static var appx = 0;
+	static var appy = 0;
+	static var lastWindowHeight = 0;
 
 	public function new() {
-		Config.init();
 		Log.init();
-		winw = System.windowWidth();
-		winh = System.windowHeight();
+		lastWindowHeight = System.windowHeight();
 
 		#if arm_resizable
 		iron.App.onResize = onResize;
 		#end
 
-		System.notifyOnDropFiles(function(filePath:String) {
-			#if krom_windows
-			if (!Path.isAscii(filePath)) filePath = Path.shortPath(filePath);
-			#end
-			dropPath = filePath;
+		System.notifyOnDropFiles(function(dropPath: String) {
 			#if krom_linux
 			dropPath = untyped decodeURIComponent(dropPath);
-			dropPath = dropPath.split("file://")[0]; // Multiple files dropped, take first
-			#end
+			dropPaths = dropPath.split("file://");
+			for (i in 0...dropPaths.length) dropPaths[i] = dropPaths[i].rtrim();
+			#else
 			dropPath = dropPath.rtrim();
+			dropPaths.push(dropPath);
+			#end
+			#if krom_ios
+			// Import immediately while access to resource is unlocked
+			handleDropPaths();
+			#end
 		});
 
 		System.notifyOnApplicationState(
-			// Release alt after alt-tab
-			function(){ @:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Alt); }, // Foreground
-			function(){}, // Resume
-			function(){}, // Pause
-			function(){}, // Background
-			function(){} // Shutdown
+			function() { // Foreground
+				Context.lastPaintX = -1;
+				Context.lastPaintY = -1;
+			},
+			function() {}, // Resume
+			function() {}, // Pause
+			function() { // Background
+				// Release keys after alt-tab / win-tab
+				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Alt);
+				@:privateAccess Input.getKeyboard().upListener(kha.input.KeyCode.Win);
+			},
+			function() {} // Shutdown
 		);
 
-		#if krom_windows
 		Krom.setSaveAndQuitCallback(saveAndQuitCallback);
-		#end
 
-		Data.getFont("font_default.ttf", function(f:Font) {
-			Data.getImage('color_wheel.png', function(image:Image) {
+		Data.getFont("font.ttf", function(f: Font) {
+			Data.getImage("color_wheel.k", function(image: Image) {
+
 				font = f;
+				Translator.loadTranslations(Config.raw.locale);
+				UIFiles.filename = tr("untitled");
+
 				theme = zui.Themes.dark;
 				theme.FILL_WINDOW_BG = true;
 
-				var kimg:kha.Kravur.KravurImage = js.lib.Object.create(untyped kha.Kravur.KravurImage.prototype);
-				@:privateAccess kimg.mySize = 13;
-				@:privateAccess kimg.width = 128;
-				@:privateAccess kimg.height = 128;
-				@:privateAccess kimg.baseline = 10;
-				var chars = new haxe.ds.Vector(ConstData.font_x0.length);
-				// kha.graphics2.Graphics.fontGlyphs = [for (i in 32...127) i];
-				kha.graphics2.Graphics.fontGlyphs = [for (i in 32...206) i]; // Fix tiny font
-				// for (i in 0...ConstData.font_x0.length) chars[i] = new Stbtt_bakedchar();
-				for (i in 0...174) chars[i] = new Stbtt_bakedchar();
-				for (i in 0...ConstData.font_x0.length) chars[i].x0 = ConstData.font_x0[i];
-				for (i in 0...ConstData.font_y0.length) chars[i].y0 = ConstData.font_y0[i];
-				for (i in 0...ConstData.font_x1.length) chars[i].x1 = ConstData.font_x1[i];
-				for (i in 0...ConstData.font_y1.length) chars[i].y1 = ConstData.font_y1[i];
-				for (i in 0...ConstData.font_xoff.length) chars[i].xoff = ConstData.font_xoff[i];
-				for (i in 0...ConstData.font_yoff.length) chars[i].yoff = ConstData.font_yoff[i];
-				for (i in 0...ConstData.font_xadvance.length) chars[i].xadvance = ConstData.font_xadvance[i];
-				@:privateAccess kimg.chars = chars;
-				Data.getBlob("font13.bin", function(fontbin:kha.Blob) {
-					@:privateAccess kimg.texture = Image.fromBytes(fontbin.toBytes(), 128, 128, kha.graphics4.TextureFormat.L8);
-					// @:privateAccess cast(font, kha.Kravur).images.set(130095, kimg);
-					@:privateAccess cast(font, kha.Kravur).images.set(130174, kimg);
-				});
-
-				color_wheel = image;
-				Nodes.getEnumTexts = getEnumTexts;
-				Nodes.mapEnum = mapEnum;
-				uibox = new Zui({ font: f, scaleFactor: Config.raw.window_scale });
-
-				// File to open passed as argument
-				if (Krom.getArgCount() > 1) {
-					var path = Krom.getArg(1);
-					if (Path.isProject(path) ||
-						Path.isMesh(path) ||
-						Path.isTexture(path) ||
-						Path.isFont(path)) {
-						fileArg = path;
-					}
+				// Precompiled font for fast startup
+				if (Config.raw.locale == "en") {
+					var kimg: kha.Kravur.KravurImage = js.lib.Object.create(untyped kha.Kravur.KravurImage.prototype);
+					@:privateAccess kimg.mySize = 13;
+					@:privateAccess kimg.width = 128;
+					@:privateAccess kimg.height = 128;
+					@:privateAccess kimg.baseline = 10;
+					var chars = new haxe.ds.Vector(ConstData.font_x0.length);
+					kha.graphics2.Graphics.fontGlyphs = [for (i in 32...127) i];
+					for (i in 0...95) chars[i] = new Stbtt_bakedchar();
+					for (i in 0...ConstData.font_x0.length) chars[i].x0 = ConstData.font_x0[i];
+					for (i in 0...ConstData.font_y0.length) chars[i].y0 = ConstData.font_y0[i];
+					for (i in 0...ConstData.font_x1.length) chars[i].x1 = ConstData.font_x1[i];
+					for (i in 0...ConstData.font_y1.length) chars[i].y1 = ConstData.font_y1[i];
+					for (i in 0...ConstData.font_xoff.length) chars[i].xoff = ConstData.font_xoff[i];
+					for (i in 0...ConstData.font_yoff.length) chars[i].yoff = ConstData.font_yoff[i];
+					for (i in 0...ConstData.font_xadvance.length) chars[i].xadvance = ConstData.font_xadvance[i];
+					@:privateAccess kimg.chars = chars;
+					Data.getBlob("font13.bin", function(fontbin: kha.Blob) {
+						@:privateAccess kimg.texture = Image.fromBytes(fontbin.toBytes(), 128, 128, kha.graphics4.TextureFormat.L8);
+						@:privateAccess cast(font, kha.Kravur).images.set(130095, kimg);
+					});
 				}
+
+				colorWheel = image;
+				Nodes.enumTexts = enumTexts;
+				uiBox = new Zui({ font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
+				uiMenu = new Zui({ font: f, scaleFactor: Config.raw.window_scale, color_wheel: colorWheel });
+				defaultElementH = uiMenu.t.ELEMENT_H;
+
+				Args.parse();
+
 				iron.App.notifyOnUpdate(update);
-				var root = Scene.active.root;
-				new UITrait();
+				new UISidebar();
 				new UINodes();
 				new UIView2D();
 				new Camera();
-				iron.App.notifyOnRender2D(UITrait.inst.renderCursor);
+				iron.App.notifyOnRender2D(UIView2D.inst.render);
+				iron.App.notifyOnUpdate(UIView2D.inst.update);
+				iron.App.notifyOnRender2D(UISidebar.inst.renderCursor);
 				iron.App.notifyOnUpdate(UINodes.inst.update);
 				iron.App.notifyOnRender2D(UINodes.inst.render);
-				iron.App.notifyOnUpdate(UITrait.inst.update);
-				iron.App.notifyOnRender2D(UITrait.inst.render);
+				iron.App.notifyOnUpdate(UISidebar.inst.update);
+				iron.App.notifyOnRender2D(UISidebar.inst.render);
 				iron.App.notifyOnRender2D(render);
-				appx = UITrait.inst.toolbarw;
-				appy = UITrait.inst.headerh * 2;
+				appx = UIToolbar.inst.toolbarw;
+				appy = UIHeader.inst.headerh * 2;
 				var cam = Scene.active.camera;
 				cam.data.raw.fov = Std.int(cam.data.raw.fov * 100) / 100;
 				cam.buildProjection();
 				#if arm_creator
-				Project.projectNew(); // Spawn terrain plane
+				Project.projectNew(); // Spawns plane as default object
 				#end
-				if (fileArg != "") {
-					Importer.run(fileArg);
-					// if (Path.isMesh(fileArg)) {
-					// 	UITrait.inst.toggleDistractFree();
-					// }
-					// else if (Path.isTexture(fileArg)) {
-					// 	UITrait.inst.show2DView(1);
-					// }
-				}
-				// Parse arguments
-				// armorpaint import_path export_path export_file_name
-				if (Krom.getArgCount() > 2) {
-					UITrait.inst.textureExportPath = Krom.getArg(2);
-					if (Krom.getArgCount() > 3) {
-						UIFiles.filename = Krom.getArg(3);
-						UITrait.inst.outputType = 1; // occ-rough-met
-					}
+
+				Args.run();
+
+				// Non-default theme selected
+				if (Config.raw.theme != "default.json") {
+					arm.ui.BoxPreferences.loadTheme(Config.raw.theme);
 				}
 			});
 		});
 	}
 
-	static function saveAndQuitCallback(save:Bool) {
+	static function saveAndQuitCallback(save: Bool) {
 		saveWindowRect();
-		if (save) {
-			saveAndQuit = true;
-			Project.projectSave();
-		}
+		if (save) Project.projectSave(true);
 		else System.stop();
 	}
 
-	public static function w():Int {
+	public static function w(): Int {
 		// Draw material preview
-		if (UITrait.inst != null && UITrait.inst.materialPreview) return RenderUtil.matPreviewSize;
+		if (UISidebar.inst != null && Context.materialPreview) {
+			return RenderUtil.matPreviewSize;
+		}
 
 		// Drawing decal preview
-		if (UITrait.inst != null && UITrait.inst.decalPreview) return RenderUtil.decalPreviewSize;
+		if (UISidebar.inst != null && Context.decalPreview) {
+			return RenderUtil.decalPreviewSize;
+		}
 
 		var res = 0;
-		if (UINodes.inst == null || UITrait.inst == null) {
-			res = System.windowWidth() - UITrait.defaultWindowW - UITrait.defaultToolbarW;
+		if (UINodes.inst == null || UISidebar.inst == null) {
+			res = System.windowWidth() - UISidebar.defaultWindowW - UIToolbar.defaultToolbarW;
 		}
 		else if (UINodes.inst.show || UIView2D.inst.show) {
-			res = System.windowWidth() - UITrait.inst.windowW - UINodes.inst.defaultWindowW - UITrait.inst.toolbarw;
+			res = System.windowWidth() - UISidebar.inst.windowW - UINodes.inst.defaultWindowW - UIToolbar.inst.toolbarw;
 		}
-		else if (UITrait.inst.show) {
-			res = System.windowWidth() - UITrait.inst.windowW - UITrait.inst.toolbarw;
+		else if (UISidebar.inst.show) {
+			res = System.windowWidth() - UISidebar.inst.windowW - UIToolbar.inst.toolbarw;
 		}
 		else { // Distract free
 			res = System.windowWidth();
 		}
-
-		if (UITrait.inst != null && UITrait.inst.viewIndex > -1) res = Std.int(res / 2);
+		if (UISidebar.inst != null && Context.viewIndex > -1) {
+			res = Std.int(res / 2);
+		}
 
 		return res > 0 ? res : 1; // App was minimized, force render path resize
 	}
 
-	public static function h():Int {
+	public static function h(): Int {
 		// Draw material preview
-		if (UITrait.inst != null && UITrait.inst.materialPreview) return RenderUtil.matPreviewSize;
+		if (UISidebar.inst != null && Context.materialPreview) {
+			return RenderUtil.matPreviewSize;
+		}
 
 		// Drawing decal preview
-		if (UITrait.inst != null && UITrait.inst.decalPreview) return RenderUtil.decalPreviewSize;
+		if (UISidebar.inst != null && Context.decalPreview) {
+			return RenderUtil.decalPreviewSize;
+		}
 
-		var res = 0;
-		res = System.windowHeight();
-		if (UITrait.inst == null) res -= UITrait.defaultHeaderH * 3;
-		if (UITrait.inst != null && UITrait.inst.show && res > 0) res -= UITrait.inst.headerh * 3;
+		var res = System.windowHeight();
+		if (UISidebar.inst == null) {
+			res -= UIHeader.defaultHeaderH * 2 + UIStatus.defaultStatusH;
+		}
+		else if (UISidebar.inst != null && UISidebar.inst.show && res > 0) {
+			res -= Std.int(UIHeader.defaultHeaderH * 2 * Config.raw.window_scale) + UIStatus.inst.statush;
+		}
 
 		return res > 0 ? res : 1; // App was minimized, force render path resize
 	}
 
-	public static function x():Int {
-		if (UITrait.inst.viewIndex == 1) return appx + w();
-		return appx;
+	public static function x(): Int {
+		return Context.viewIndex == 1 ? appx + w() : appx;
 	}
 
-	public static function y():Int {
+	public static function y(): Int {
 		return appy;
 	}
 
@@ -238,13 +252,11 @@ class App {
 	static function onResize() {
 		resize();
 
-		var ratio = System.windowHeight() / winh;
-		UITrait.inst.tabh = Std.int(UITrait.inst.tabh * ratio);
-		UITrait.inst.tabh1 = Std.int(UITrait.inst.tabh1 * ratio);
-		UITrait.inst.tabh2 = System.windowHeight() - UITrait.inst.tabh - UITrait.inst.tabh1;
-
-		winw = System.windowWidth();
-		winh = System.windowHeight();
+		var ratio = System.windowHeight() / lastWindowHeight;
+		UISidebar.inst.tabh = Std.int(UISidebar.inst.tabh * ratio);
+		UISidebar.inst.tabh1 = Std.int(UISidebar.inst.tabh1 * ratio);
+		UISidebar.inst.tabh2 = System.windowHeight() - UISidebar.inst.tabh - UISidebar.inst.tabh1;
+		lastWindowHeight = System.windowHeight();
 	}
 	#end
 
@@ -268,16 +280,17 @@ class App {
 		}
 		cam.buildProjection();
 
-		if (UITrait.inst.cameraType == 1) {
-			ViewportUtil.updateCameraType(UITrait.inst.cameraType);
+		if (Context.cameraType == CameraOrthographic) {
+			ViewportUtil.updateCameraType(Context.cameraType);
 		}
 
 		Context.ddirty = 2;
 
-		appx = UITrait.inst.toolbarw;
-		appy = UITrait.inst.headerh * 2;
-
-		if (!UITrait.inst.show) {
+		if (UISidebar.inst.show) {
+			appx = UIToolbar.inst.toolbarw;
+			appy = UIHeader.inst.headerh * 2;
+		}
+		else {
 			appx = 0;
 			appy = 0;
 		}
@@ -291,42 +304,40 @@ class App {
 	}
 
 	public static function redrawUI() {
-		UITrait.inst.hwnd.redraws = 2;
-		UITrait.inst.hwnd1.redraws = 2;
-		UITrait.inst.hwnd2.redraws = 2;
-		UITrait.inst.headerHandle.redraws = 2;
-		UITrait.inst.toolbarHandle.redraws = 2;
-		UITrait.inst.statusHandle.redraws = 2;
-		UITrait.inst.menuHandle.redraws = 2;
-		UITrait.inst.workspaceHandle.redraws = 2;
+		UISidebar.inst.hwnd.redraws = 2;
+		UISidebar.inst.hwnd1.redraws = 2;
+		UISidebar.inst.hwnd2.redraws = 2;
+		UIHeader.inst.headerHandle.redraws = 2;
+		UIToolbar.inst.toolbarHandle.redraws = 2;
+		UIStatus.inst.statusHandle.redraws = 2;
+		UIMenubar.inst.menuHandle.redraws = 2;
+		UIMenubar.inst.workspaceHandle.redraws = 2;
 		UINodes.inst.hwnd.redraws = 2;
-		if (Context.ddirty < 0) Context.ddirty = 0; // Tag cached viewport texture redraw
+		if (Context.ddirty < 0) Context.ddirty = 0; // Redraw viewport
 	}
 
 	static function update() {
 		var mouse = Input.getMouse();
-		var kb = Input.getKeyboard();
 
-		if ((dragAsset != null || dragMaterial != null) &&
+		if ((dragAsset != null || dragMaterial != null || dragLayer != null || dragFile != null) &&
 			(mouse.movementX != 0 || mouse.movementY != 0)) {
 			isDragging = true;
 		}
-		if (mouse.released() && (dragAsset != null || dragMaterial != null)) {
+		if (mouse.released() && (dragAsset != null || dragMaterial != null || dragLayer != null || dragFile != null)) {
 			var mx = mouse.x;
 			var my = mouse.y;
-			var inViewport = UITrait.inst.paintVec.x < 1 && UITrait.inst.paintVec.x > 0 &&
-							 UITrait.inst.paintVec.y < 1 && UITrait.inst.paintVec.y > 0;
-			var inLayers = UITrait.inst.htab.position == 0 &&
-						   mx > UITrait.inst.tabx && my < UITrait.inst.tabh;
-			var in2dView = UIView2D.inst.show && UIView2D.inst.type == 0 &&
+			var inViewport = Context.paintVec.x < 1 && Context.paintVec.x > 0 &&
+							 Context.paintVec.y < 1 && Context.paintVec.y > 0;
+			var inLayers = UISidebar.inst.htab.position == 0 &&
+						   mx > UISidebar.inst.tabx && my < UISidebar.inst.tabh;
+			var in2dView = UIView2D.inst.show && UIView2D.inst.type == View2DLayer &&
 						   mx > UIView2D.inst.wx && mx < UIView2D.inst.wx + UIView2D.inst.ww &&
 						   my > UIView2D.inst.wy && my < UIView2D.inst.wy + UIView2D.inst.wh;
 			var inNodes = UINodes.inst.show &&
 						  mx > UINodes.inst.wx && mx < UINodes.inst.wx + UINodes.inst.ww &&
 						  my > UINodes.inst.wy && my < UINodes.inst.wy + UINodes.inst.wh;
 			if (dragAsset != null) {
-				// Create image texture
-				if (inNodes) {
+				if (inNodes) { // Create image texture
 					var index = 0;
 					for (i in 0...Project.assets.length) {
 						if (Project.assets[i] == dragAsset) {
@@ -334,25 +345,86 @@ class App {
 							break;
 						}
 					}
-					UINodes.inst.acceptDrag(index);
+					UINodes.inst.acceptAssetDrag(index);
 				}
-				// Create mask
-				else if (inViewport || inLayers || in2dView) {
+				else if (inViewport || inLayers || in2dView) { // Create mask
 					Layers.createImageMask(dragAsset);
 				}
 				dragAsset = null;
 			}
-			if (dragMaterial != null) {
+			else if (dragMaterial != null) {
 				// Material dragged onto viewport or layers tab
 				if (inViewport || inLayers || in2dView) {
 					Layers.createFillLayer();
 				}
+				else if (inNodes) {
+					var index = 0;
+					for (i in 0...Project.materials.length) {
+						if (Project.materials[i] == dragMaterial) {
+							index = i;
+							break;
+						}
+					}
+					UINodes.inst.acceptMaterialDrag(index);
+				}
 				dragMaterial = null;
+			}
+			else if (dragLayer != null) {
+				if (inNodes) {
+					var index = 0;
+					for (i in 0...Project.layers.length) {
+						if (Project.layers[i] == dragLayer) {
+							index = i;
+							break;
+						}
+					}
+					UINodes.inst.acceptLayerDrag(index);
+				}
+				else if (inLayers && isDragging) {
+					Project.layers.remove(dragLayer);
+					Project.layers.insert(TabLayers.dragDestination, dragLayer);
+					MaterialParser.parseMeshMaterial();
+				}
+				dragLayer = null;
+			}
+			else if (dragFile != null) {
+				var inBrowser =
+					mx > iron.App.x() && mx < iron.App.x() + (System.windowWidth() - UIToolbar.inst.toolbarw - UISidebar.inst.windowW) &&
+					my > System.windowHeight() - UIStatus.inst.statush;
+				if (!inBrowser) {
+					dropX = mouse.x;
+					dropY = mouse.y;
+					ImportAsset.run(dragFile, dropX, dropY);
+				}
+				dragFile = null;
 			}
 			isDragging = false;
 		}
 
-		if (dropPath != "") {
+		handleDropPaths();
+
+		if (UIBox.show) UIBox.update();
+		if (UIMenu.show) UIMenu.update();
+
+		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
+		var isPicker = Context.tool == ToolPicker;
+		#if krom_windows
+		Zui.alwaysRedrawWindow = !Context.cacheDraws ||
+			UIMenu.show ||
+			UIBox.show ||
+			isDragging ||
+			isPicker ||
+			decal ||
+			UIView2D.inst.show ||
+			!Config.raw.brush_3d ||
+			Context.frame < 3;
+		#end
+		if (Zui.alwaysRedrawWindow && Context.ddirty < 0) Context.ddirty = 0;
+	}
+
+	static function handleDropPaths() {
+		if (dropPaths.length > 0) {
+			var mouse = Input.getMouse();
 			#if krom_linux
 			var wait = !mouse.moved; // Mouse coords not updated on Linux during drag
 			#else
@@ -361,70 +433,82 @@ class App {
 			if (!wait) {
 				dropX = mouse.x;
 				dropY = mouse.y;
-				Importer.run(dropPath, dropX, dropY);
-				dropPath = "";
+				var dropPath = dropPaths.shift();
+				ImportAsset.run(dropPath, dropX, dropY);
 			}
 		}
-
-		if (UIBox.show) UIBox.update();
-
-		var decal = Context.tool == ToolDecal || Context.tool == ToolText;
-		var isPicker = Context.tool == ToolPicker;
-		#if krom_windows
-		Zui.alwaysRedrawWindow = !UITrait.inst.cacheDraws ||
-			UIMenu.show ||
-			UIBox.show ||
-			isDragging ||
-			isPicker ||
-			decal ||
-			UIView2D.inst.show ||
-			!UITrait.inst.brush3d ||
-			UITrait.inst.frame < 3;
-		#end
-		if (Zui.alwaysRedrawWindow && Context.ddirty < 0) Context.ddirty = 0;
 	}
 
-	static function render(g:kha.graphics2.Graphics) {
+	static function getDragBackground(): TRect {
+		var icons = Res.get("icons.k");
+		if (dragLayer != null) return Res.tile50(icons, 4, 1);
+		else return null;
+	}
+
+	static function getDragImage(): kha.Image {
+		dragTint = 0xffffffff;
+		dragRect = null;
+		if (dragAsset != null) return UISidebar.inst.getImage(dragAsset);
+		if (dragMaterial != null) return dragMaterial.imageIcon;
+		if (dragLayer != null && Context.layerIsMask) return dragLayer.texpaint_mask_preview;
+		if (dragFile != null) {
+			var icons = Res.get("icons.k");
+			dragRect = dragFile.indexOf(".") > 0 ? Res.tile50(icons, 3, 1) : Res.tile50(icons, 2, 1);
+			dragTint = UISidebar.inst.ui.t.HIGHLIGHT_COL;
+			return icons;
+		}
+		else return dragLayer.texpaint_preview;
+	}
+
+	static function render(g: kha.graphics2.Graphics) {
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
 
 		var mouse = Input.getMouse();
 		if (isDragging) {
 			Krom.setMouseCursor(1); // Hand
-			var img = dragAsset != null ? UITrait.inst.getImage(dragAsset) : dragMaterial.imageIcon;
-			@:privateAccess var size = 50 * UITrait.inst.ui.SCALE();
+			var img = getDragImage();
+			var size = 50 * UISidebar.inst.ui.ops.scaleFactor;
 			var ratio = size / img.width;
 			var h = img.height * ratio;
 			#if (kha_opengl || kha_webgl)
-			var inv = dragMaterial != null ? h : 0;
+			var inv = (dragMaterial != null || dragLayer != null) ? h : 0;
 			#else
 			var inv = 0;
 			#end
-			g.drawScaledImage(img, mouse.x + dragOffX, mouse.y + dragOffY + inv, size, h - inv * 2);
+			g.color = dragTint;
+			var bgRect = getDragBackground();
+			if (bgRect != null) g.drawScaledSubImage(Res.get("icons.k"), bgRect.x, bgRect.y, bgRect.w, bgRect.h, mouse.x + dragOffX, mouse.y + dragOffY + inv, size, h - inv * 2);
+			dragRect == null ?
+				g.drawScaledImage(img, mouse.x + dragOffX, mouse.y + dragOffY + inv, size, h - inv * 2) :
+				g.drawScaledSubImage(img, dragRect.x, dragRect.y, dragRect.w, dragRect.h, mouse.x + dragOffX, mouse.y + dragOffY + inv, size, h - inv * 2);
+			g.color = 0xffffffff;
 		}
 
-		var usingMenu = false;
-		if (UIMenu.show) usingMenu = mouse.y > UITrait.inst.headerh;
-
-		uienabled = !UIBox.show && !usingMenu;
+		var usingMenu = UIMenu.show && mouse.y > UIHeader.inst.headerh;
+		uiEnabled = !UIBox.show && !usingMenu;
 		if (UIBox.show) UIBox.render(g);
 		if (UIMenu.show) UIMenu.render(g);
 	}
 
-	public static function getEnumTexts():Array<String> {
-		return Project.assetNames.length > 0 ? Project.assetNames : [""];
-	}
-
-	public static function mapEnum(s:String):String {
-		for (a in Project.assets) if (a.name == s) return a.file;
-		return "";
-	}
-
-	public static function getAssetIndex(f:String):Int {
-		for (i in 0...Project.assets.length) {
-			if (Project.assets[i].file == f) {
-				return i;
-			}
+	public static function enumTexts(nodeType: String): Array<String> {
+		if (nodeType == "TEX_IMAGE") {
+			return Project.assetNames.length > 0 ? Project.assetNames : [""];
 		}
-		return 0;
+		else if (nodeType == "LAYER" || nodeType == "LAYER_MASK") {
+			var layerNames: Array<String> = [];
+			for (l in Project.layers) layerNames.push(l.name);
+			return layerNames;
+		}
+		else if (nodeType == "MATERIAL") {
+			var materialNames: Array<String> = [];
+			for (m in Project.materials) materialNames.push(m.canvas.name);
+			return materialNames;
+		}
+		return null;
+	}
+
+	public static function getAssetIndex(fileName: String): Int {
+		var i = Project.assetNames.indexOf(fileName);
+		return i >= 0 ? i : 0;
 	}
 }

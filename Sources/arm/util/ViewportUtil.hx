@@ -3,7 +3,8 @@ package arm.util;
 import kha.arrays.Float32Array;
 import iron.Scene;
 import iron.math.Vec4;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
+import arm.Enums;
 
 class ViewportUtil {
 
@@ -23,11 +24,11 @@ class ViewportUtil {
 	public static function resetViewport() {
 		var cam = Scene.active.camera;
 		for (o in Scene.active.raw.objects) {
-			if (o.type == 'camera_object') {
+			if (o.type == "camera_object") {
 				cam.transform.local.setF32(o.transform.values);
 				cam.transform.decompose();
-				if (UITrait.inst.fovHandle != null) UITrait.inst.fovHandle.value = 0.92;
-				UITrait.inst.camHandle.position = 0;
+				if (Context.fovHandle != null) Context.fovHandle.value = 0.92;
+				Context.camHandle.position = 0;
 				cam.data.raw.ortho = null;
 				cam.buildProjection();
 				Context.ddirty = 2;
@@ -37,7 +38,7 @@ class ViewportUtil {
 		}
 	}
 
-	public static function setView(x:Float, y:Float, z:Float, rx:Float, ry:Float, rz:Float) {
+	public static function setView(x: Float, y: Float, z: Float, rx: Float, ry: Float, rz: Float) {
 		Context.object.transform.rot.set(0, 0, 0, 1);
 		Context.object.transform.dirty = true;
 		var cam = Scene.active.camera;
@@ -50,7 +51,7 @@ class ViewportUtil {
 		arm.plugin.Camera.inst.reset();
 	}
 
-	public static function orbit(x:Float, y:Float) {
+	public static function orbit(x: Float, y: Float) {
 		var cam = Scene.active.camera;
 		var dist = arm.plugin.Camera.dist;
 		cam.transform.move(cam.lookWorld(), dist);
@@ -60,10 +61,17 @@ class ViewportUtil {
 		Context.ddirty = 2;
 	}
 
-	public static function updateCameraType(cameraType:Int) {
+	public static function zoom(f: Float) {
+		var cam = Scene.active.camera;
+		cam.transform.move(cam.look(), f);
+		arm.plugin.Camera.dist -= f;
+		Context.ddirty = 2;
+	}
+
+	public static function updateCameraType(cameraType: Int) {
 		var cam = Scene.active.cameras[0];
 		var light = Scene.active.lights[0];
-		if (cameraType == 0) {
+		if (cameraType == CameraPerspective) {
 			cam.data.raw.ortho = null;
 			light.visible = true;
 		}

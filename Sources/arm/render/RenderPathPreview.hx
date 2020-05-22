@@ -1,23 +1,100 @@
 package arm.render;
 
 import iron.RenderPath;
-import arm.ui.UITrait;
-import arm.Tool;
+import arm.util.RenderUtil;
+import arm.ui.UIHeader;
+import arm.Enums;
 
 @:access(iron.RenderPath)
 class RenderPathPreview {
 
-	public static function commandsPreview() {
+	public static var path: RenderPath;
 
-		var path = RenderPathDeferred.path;
+	public static function init(_path: RenderPath) {
+		path = _path;
+
+		{
+			var t = new RenderTargetRaw();
+			t.name = "texpreview";
+			t.width = 1;
+			t.height = 1;
+			t.format = "RGBA32";
+			path.createRenderTarget(t);
+		}
+		{
+			var t = new RenderTargetRaw();
+			t.name = "texpreview_icon";
+			t.width = 1;
+			t.height = 1;
+			t.format = "RGBA32";
+			path.createRenderTarget(t);
+		}
+
+		{
+			path.createDepthBuffer("mmain", "DEPTH24");
+
+			var t = new RenderTargetRaw();
+			t.name = "mtex";
+			t.width = RenderUtil.matPreviewSize;
+			t.height = RenderUtil.matPreviewSize;
+			t.format = "RGBA64";
+			t.scale = Inc.getSuperSampling();
+			t.depth_buffer = "mmain";
+			path.createRenderTarget(t);
+		}
+
+		{
+			var t = new RenderTargetRaw();
+			t.name = "mgbuffer0";
+			t.width = RenderUtil.matPreviewSize;
+			t.height = RenderUtil.matPreviewSize;
+			t.format = "RGBA64";
+			t.scale = Inc.getSuperSampling();
+			t.depth_buffer = "mmain";
+			path.createRenderTarget(t);
+		}
+
+		{
+			var t = new RenderTargetRaw();
+			t.name = "mgbuffer1";
+			t.width = RenderUtil.matPreviewSize;
+			t.height = RenderUtil.matPreviewSize;
+			t.format = "RGBA64";
+			t.scale = Inc.getSuperSampling();
+			path.createRenderTarget(t);
+		}
+
+		{
+			var t = new RenderTargetRaw();
+			t.name = "mgbuffer2";
+			t.width = RenderUtil.matPreviewSize;
+			t.height = RenderUtil.matPreviewSize;
+			t.format = "RGBA64";
+			t.scale = Inc.getSuperSampling();
+			path.createRenderTarget(t);
+		}
+
+		//
+		// path.loadShader("deferred_light/deferred_light/deferred_light");
+		// path.loadShader("world_pass/world_pass/world_pass");
+		// path.loadShader("shader_datas/compositor_pass/compositor_pass");
+		// path.loadShader("shader_datas/supersample_resolve/supersample_resolve");
+		//
+	}
+
+	public static function commandsPreview() {
 		path.setTarget("mgbuffer2");
 		path.clearTarget(0xff000000);
-		path.setTarget("mgbuffer0", ["mgbuffer1", "mgbuffer2"]);
-		#if arm_world
-		path.clearTarget(0xffffffff, 1.0);
+
+		#if (arm_world || kha_metal)
+		var clearColor = 0xffffffff;
 		#else
-		path.clearTarget(null, 1.0);
+		var clearColor: Null<Int> = null;
 		#end
+
+		path.setTarget("mgbuffer0");
+		path.clearTarget(clearColor, 1.0);
+		path.setTarget("mgbuffer0", ["mgbuffer1", "mgbuffer2"]);
 		path.drawMeshes("mesh");
 
 		// ---
@@ -45,7 +122,7 @@ class RenderPathPreview {
 		#end
 
 		var framebuffer = "texpreview";
-		var selectedMat = UITrait.inst.worktab.position == SpaceScene ? Context.materialScene : Context.material;
+		var selectedMat = UIHeader.inst.worktab.position == SpaceRender ? Context.materialScene : Context.material;
 		RenderPath.active.renderTargets.get("texpreview").image = selectedMat.image;
 		RenderPath.active.renderTargets.get("texpreview_icon").image = selectedMat.imageIcon;
 
@@ -65,12 +142,11 @@ class RenderPathPreview {
 	}
 
 	public static function commandsDecal() {
-
-		var path = RenderPathDeferred.path;
 		path.setTarget("gbuffer2");
 		path.clearTarget(0xff000000);
-		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
+		path.setTarget("gbuffer0");
 		path.clearTarget(null, 1.0);
+		path.setTarget("gbuffer0", ["gbuffer1", "gbuffer2"]);
 		path.drawMeshes("mesh");
 
 		// ---
@@ -96,7 +172,7 @@ class RenderPathPreview {
 		path.drawSkydome("world_pass/world_pass/world_pass");
 
 		var framebuffer = "texpreview";
-		RenderPath.active.renderTargets.get("texpreview").image = UITrait.inst.decalImage;
+		RenderPath.active.renderTargets.get("texpreview").image = Context.decalImage;
 
 		path.setTarget(framebuffer);
 

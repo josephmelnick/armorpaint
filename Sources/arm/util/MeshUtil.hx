@@ -7,8 +7,8 @@ import iron.data.MeshData;
 import iron.data.Data;
 import iron.object.MeshObject;
 import iron.math.Vec4;
-import arm.ui.UITrait;
-import arm.Tool;
+import arm.ui.UIHeader;
+import arm.Enums;
 
 class MeshUtil {
 
@@ -49,12 +49,12 @@ class MeshUtil {
 			ioff += Std.int(ias[0].values.length);
 		}
 
-		var raw:TMeshData = {
+		var raw: TMeshData = {
 			name: Context.paintObject.name,
 			vertex_arrays: [
-				{ values: va0, attrib: "pos" },
-				{ values: va1, attrib: "nor" },
-				{ values: va2, attrib: "tex" }
+				{ values: va0, attrib: "pos", data: "short4norm" },
+				{ values: va1, attrib: "nor", data: "short2norm" },
+				{ values: va2, attrib: "tex", data: "short2norm" }
 			],
 			index_arrays: [
 				{ values: ia, material: 0 }
@@ -63,16 +63,20 @@ class MeshUtil {
 			scale_tex: 1.0
 		};
 
-		new MeshData(raw, function(md:MeshData) {
+		new MeshData(raw, function(md: MeshData) {
 			Context.mergedObject = new MeshObject(md, Context.paintObject.materials);
 			Context.mergedObject.name = Context.paintObject.name;
 			Context.mergedObject.force_context = "paint";
 			Context.mainObject().addChild(Context.mergedObject);
 		});
+
+		#if kha_direct3d12
+		arm.render.RenderPathRaytrace.ready = false;
+		#end
 	}
 
-	public static function swapAxis(a:Int, b:Int) {
-		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+	public static function swapAxis(a: Int, b: Int) {
+		var objects = UIHeader.inst.worktab.position == SpaceRender ? [cast(Context.object, MeshObject)] : Project.paintObjects;
 		for (o in objects) {
 			// Remapping vertices, backle up
 			// 0 - x, 1 - y, 2 - z
@@ -119,14 +123,10 @@ class MeshUtil {
 			Context.mergedObject = null;
 		}
 		mergeMesh();
-
-		#if kha_direct3d12
-		arm.render.RenderPathRaytrace.ready = false;
-		#end
 	}
 
 	public static function flipNormals() {
-		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+		var objects = UIHeader.inst.worktab.position == SpaceRender ? [cast(Context.object, MeshObject)] : Project.paintObjects;
 		for (o in objects) {
 			var g = o.data.geom;
 			var vertices = g.vertexBuffer.lockInt16(); // posnortex
@@ -149,7 +149,7 @@ class MeshUtil {
 		var vc = new Vec4();
 		var cb = new Vec4();
 		var ab = new Vec4();
-		var objects = UITrait.inst.worktab.position == SpaceScene ? [cast(Context.object, MeshObject)] : Project.paintObjects;
+		var objects = UIHeader.inst.worktab.position == SpaceRender ? [cast(Context.object, MeshObject)] : Project.paintObjects;
 		for (o in objects) {
 			var g = o.data.geom;
 			var inda = g.indices[0];

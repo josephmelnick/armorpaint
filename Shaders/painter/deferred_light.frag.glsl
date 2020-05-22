@@ -45,8 +45,9 @@ uniform vec3 eyeSnap;
 #endif
 
 uniform float envmapStrength;
+uniform float envmapAngle;
 #ifdef _Irr
-//!uniform vec4 shirr[7];
+uniform vec4 shirr[7];
 #endif
 #ifdef _Brdf
 uniform sampler2D senvmapBrdf;
@@ -205,7 +206,7 @@ void main() {
 
 	// Envmap
 #ifdef _Irr
-	vec3 envl = shIrradiance(n);
+	vec3 envl = shIrradiance(n, shirr);
 	#ifdef _EnvTex
 	envl /= PI;
 	#endif
@@ -216,7 +217,7 @@ void main() {
 #ifdef _Rad
 	vec3 reflectionWorld = reflect(-v, n);
 	float lod = getMipFromRoughness(roughness, envmapNumMipmaps);
-	vec3 prefilteredColor = textureLod(senvmapRadiance, envMapEquirect(reflectionWorld), lod).rgb;
+	vec3 prefilteredColor = textureLod(senvmapRadiance, envMapEquirect(reflectionWorld, envmapAngle), lod).rgb;
 #endif
 
 #ifdef _EnvLDR

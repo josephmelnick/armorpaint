@@ -6,12 +6,12 @@ import iron.system.Input;
 import iron.math.RayCaster;
 import iron.math.Vec4;
 import iron.Scene;
-import arm.ui.UITrait;
+import arm.ui.UISidebar;
 
 class Gizmo {
 
 	public static function update() {
-		var gizmo = UITrait.inst.gizmo;
+		var gizmo = Context.gizmo;
 		if (!gizmo.visible) return;
 
 		if (Context.object != null) {
@@ -19,9 +19,9 @@ class Gizmo {
 			gizmo.transform.loc.setFrom(Context.object.transform.loc);
 			var dist = Vec4.distance(cam.transform.loc, gizmo.transform.loc) / 10;
 			gizmo.transform.scale.set(dist, dist, dist);
-			UITrait.inst.gizmoX.transform.scale.set(dist, dist, dist);
-			UITrait.inst.gizmoY.transform.scale.set(dist, dist, dist);
-			UITrait.inst.gizmoZ.transform.scale.set(dist, dist, dist);
+			Context.gizmoX.transform.scale.set(dist, dist, dist);
+			Context.gizmoY.transform.scale.set(dist, dist, dist);
+			Context.gizmoZ.transform.scale.set(dist, dist, dist);
 			gizmo.transform.buildMatrix();
 		}
 
@@ -39,7 +39,7 @@ class Gizmo {
 				if (Std.is(Context.object, MeshObject)) {
 					var mo = cast(Context.object, MeshObject);
 					var object = Scene.active.addMeshObject(mo.data, mo.materials, Scene.active.getChild("Scene"));
-					object.name = mo.name + '.1';
+					object.name = mo.name + ".1";
 
 					object.transform.loc.setFrom(mo.transform.loc);
 					object.transform.rot.setFrom(mo.transform.rot);
@@ -54,25 +54,22 @@ class Gizmo {
 
 					object.transform.buildMatrix();
 
-					#if arm_physics
-					object.addTrait(new armory.trait.physics.RigidBody(0, 0));
-					#end
+					for (t in mo.traits) { // Clone traits
+						var trait = Type.createInstance(Type.getClass(t), []);
+						object.addTrait(trait);
+					}
 
 					Context.selectObject(object);
 				}
 				else if (Std.is(Context.object, LightObject)) {
 					var lo = cast(Context.object, LightObject);
 					var object = Scene.active.addLightObject(lo.data, Scene.active.getChild("Scene"));
-					object.name = lo.name + '.1';
+					object.name = lo.name + ".1";
 
 					object.transform.loc.setFrom(lo.transform.loc);
 					object.transform.rot.setFrom(lo.transform.rot);
 					object.transform.scale.setFrom(lo.transform.scale);
 					object.transform.buildMatrix();
-
-					#if arm_physics
-					object.addTrait(new armory.trait.physics.RigidBody(0, 0));
-					#end
 
 					Context.selectObject(object);
 				}
@@ -81,76 +78,76 @@ class Gizmo {
 			}
 			if (kb.started("m")) { // skip voxel
 				var raw = Context.materialScene.data.raw;
-				raw.skip_context = raw.skip_context == '' ? 'voxel' : '';
+				raw.skip_context = raw.skip_context == "" ? "voxel" : "";
 			}
 		}
 
 		if (mouse.started("middle")) {
 			#if arm_physics
-			var physics = armory.trait.physics.PhysicsWorld.active;
-			var rb = physics.pickClosest(mouse.viewX, mouse.viewY);
-			if (rb != null) Context.selectObject(rb.object);
+			var physics = arm.plugin.PhysicsWorld.active;
+			var pb = physics.pickClosest(mouse.viewX, mouse.viewY);
+			if (pb != null) Context.selectObject(pb.object);
 			#end
 		}
 
 		if (mouse.started("left") && Context.object.name != "Scene") {
 			gizmo.transform.buildMatrix();
-			var trs = [UITrait.inst.gizmoX.transform, UITrait.inst.gizmoY.transform, UITrait.inst.gizmoZ.transform];
+			var trs = [Context.gizmoX.transform, Context.gizmoY.transform, Context.gizmoZ.transform];
 			var hit = RayCaster.closestBoxIntersect(trs, mouse.viewX, mouse.viewY, Scene.active.camera);
 			if (hit != null) {
-				if (hit.object == UITrait.inst.gizmoX) UITrait.inst.axisX = true;
-				else if (hit.object == UITrait.inst.gizmoY) UITrait.inst.axisY = true;
-				else if (hit.object == UITrait.inst.gizmoZ) UITrait.inst.axisZ = true;
-				if (UITrait.inst.axisX || UITrait.inst.axisY || UITrait.inst.axisZ) UITrait.inst.axisStart = 0.0;
+				if (hit.object == Context.gizmoX) Context.axisX = true;
+				else if (hit.object == Context.gizmoY) Context.axisY = true;
+				else if (hit.object == Context.gizmoZ) Context.axisZ = true;
+				if (Context.axisX || Context.axisY || Context.axisZ) Context.axisStart = 0.0;
 			}
 		}
 		else if (mouse.released("left")) {
-			UITrait.inst.axisX = UITrait.inst.axisY = UITrait.inst.axisZ = false;
+			Context.axisX = Context.axisY = Context.axisZ = false;
 		}
 
-		if (UITrait.inst.axisX || UITrait.inst.axisY || UITrait.inst.axisZ) {
+		if (Context.axisX || Context.axisY || Context.axisZ) {
 			var t = Context.object.transform;
 			var v = new Vec4();
 			v.set(t.worldx(), t.worldy(), t.worldz());
 
-			if (UITrait.inst.axisX) {
+			if (Context.axisX) {
 				var hit = RayCaster.planeIntersect(Vec4.yAxis(), v, mouse.viewX, mouse.viewY, Scene.active.camera);
 				if (hit != null) {
-					if (UITrait.inst.axisStart == 0) UITrait.inst.axisStart = hit.x - Context.object.transform.loc.x;
-					Context.object.transform.loc.x = hit.x - UITrait.inst.axisStart;
+					if (Context.axisStart == 0) Context.axisStart = hit.x - Context.object.transform.loc.x;
+					Context.object.transform.loc.x = hit.x - Context.axisStart;
 					Context.object.transform.buildMatrix();
 					#if arm_physics
-					var rb = Context.object.getTrait(armory.trait.physics.RigidBody);
-					if (rb != null) rb.syncTransform();
+					var pb = Context.object.getTrait(arm.plugin.PhysicsBody);
+					if (pb != null) pb.syncTransform();
 					#end
 				}
 			}
-			else if (UITrait.inst.axisY) {
+			else if (Context.axisY) {
 				var hit = RayCaster.planeIntersect(Vec4.xAxis(), v, mouse.viewX, mouse.viewY, Scene.active.camera);
 				if (hit != null) {
-					if (UITrait.inst.axisStart == 0) UITrait.inst.axisStart = hit.y - Context.object.transform.loc.y;
-					Context.object.transform.loc.y = hit.y - UITrait.inst.axisStart;
+					if (Context.axisStart == 0) Context.axisStart = hit.y - Context.object.transform.loc.y;
+					Context.object.transform.loc.y = hit.y - Context.axisStart;
 					Context.object.transform.buildMatrix();
 					#if arm_physics
-					var rb = Context.object.getTrait(armory.trait.physics.RigidBody);
-					if (rb != null) rb.syncTransform();
+					var pb = Context.object.getTrait(arm.plugin.PhysicsBody);
+					if (pb != null) pb.syncTransform();
 					#end
 				}
 			}
-			else if (UITrait.inst.axisZ) {
+			else if (Context.axisZ) {
 				var hit = RayCaster.planeIntersect(Vec4.xAxis(), v, mouse.viewX, mouse.viewY, Scene.active.camera);
 				if (hit != null) {
-					if (UITrait.inst.axisStart == 0) UITrait.inst.axisStart = hit.z - Context.object.transform.loc.z;
-					Context.object.transform.loc.z = hit.z - UITrait.inst.axisStart;
+					if (Context.axisStart == 0) Context.axisStart = hit.z - Context.object.transform.loc.z;
+					Context.object.transform.loc.z = hit.z - Context.axisStart;
 					Context.object.transform.buildMatrix();
 					#if arm_physics
-					var rb = Context.object.getTrait(armory.trait.physics.RigidBody);
-					if (rb != null) rb.syncTransform();
+					var pb = Context.object.getTrait(arm.plugin.PhysicsBody);
+					if (pb != null) pb.syncTransform();
 					#end
 				}
 			}
 		}
 
-		Input.occupied = (UITrait.inst.axisX || UITrait.inst.axisY || UITrait.inst.axisZ) && mouse.viewX < App.w();
+		Input.occupied = (Context.axisX || Context.axisY || Context.axisZ) && mouse.viewX < App.w();
 	}
 }

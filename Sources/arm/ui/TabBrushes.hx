@@ -1,32 +1,40 @@
 package arm.ui;
 
+import haxe.Json;
 import iron.system.Time;
-import iron.system.Input;
 import zui.Zui;
 import arm.data.BrushSlot;
+import arm.node.MaterialParser;
+import arm.util.RenderUtil;
+import arm.io.ExportArm;
+import arm.sys.Path;
 
 class TabBrushes {
 
 	@:access(zui.Zui)
 	public static function draw() {
-		var ui = UITrait.inst.ui;
-		if (ui.tab(UITrait.inst.htab1, "Brushes")) {
-			ui.row([1/4,1/4]);
-			if (ui.button("New")) {
-				// UITrait.inst.headerHandle.redraws = 2;
+		var ui = UISidebar.inst.ui;
+		if (ui.tab(UISidebar.inst.htab1, tr("Brushes"))) {
+			ui.row([1 / 4, 1 / 4, 1 / 4]);
+			if (ui.button(tr("New"))) {
 				Context.brush = new BrushSlot();
 				Project.brushes.push(Context.brush);
-				UINodes.inst.updateCanvasBrushMap();
-				// MaterialParser.parsePaintMaterial();
-				// RenderUtil.makeMaterialPreview();
+				MaterialParser.parseBrush();
+				Context.parseBrushInputs();
+				UINodes.inst.hwnd.redraws = 2;
 			}
-			if (ui.button("Nodes")) UITrait.inst.showBrushNodes();
+			if (ui.button(tr("Import"))) {
+				Project.importBrush();
+			}
+			if (ui.button(tr("Nodes"))) {
+				UISidebar.inst.showBrushNodes();
+			}
 
 			var slotw = Std.int(51 * ui.SCALE());
-			var num = Std.int(UITrait.inst.windowW / slotw);
+			var num = Std.int(UISidebar.inst.windowW / slotw);
 
 			for (row in 0...Std.int(Math.ceil(Project.brushes.length / num))) {
-				ui.row([for (i in 0...num) 1/num]);
+				ui.row([for (i in 0...num) 1 / num]);
 
 				ui._x += 2;
 				if (row > 0) ui._y += 6;
@@ -52,44 +60,58 @@ class TabBrushes {
 						ui.fill(w + 1,      -2,     2,   w + 4, ui.t.HIGHLIGHT_COL);
 					}
 
-					#if (kha_opengl || kha_webgl)
-					ui.imageInvertY = Project.brushes[i].previewReady;
-					#end
-
-					var uix = ui._x;
-					var uiy = ui._y;
+					//var uix = ui._x;
+					//var uiy = ui._y;
 					var tile = ui.SCALE() > 1 ? 100 : 50;
-					var state = Project.brushes[i].previewReady ? ui.image(img) : ui.image(Res.get('icons.png'), -1, null, tile, tile, tile, tile);
+					var state = Project.brushes[i].previewReady ? ui.image(img) : ui.image(Res.get("icons.k"), -1, null, tile * 5, tile, tile, tile);
 					if (state == State.Started) {
 						if (Context.brush != Project.brushes[i]) Context.selectBrush(i);
-						if (Time.time() - UITrait.inst.selectTime < 0.25) UITrait.inst.showBrushNodes();
-						UITrait.inst.selectTime = Time.time();
+						if (Time.time() - Context.selectTime < 0.25) UISidebar.inst.showBrushNodes();
+						Context.selectTime = Time.time();
 						// var mouse = Input.getMouse();
 						// App.dragOffX = -(mouse.x - uix - ui._windowX - 3);
 						// App.dragOffY = -(mouse.y - uiy - ui._windowY + 1);
 						// App.dragBrush = Context.brush;
 					}
 					if (ui.isHovered && ui.inputReleasedR) {
-						UIMenu.draw(function(ui:Zui) {
-							var b = Project.brushes[i];
-							ui.fill(0, 0, ui._w / ui.SCALE(), ui.t.ELEMENT_H * 2, ui.t.SEPARATOR_COL);
-							ui.text(UINodes.inst.canvasBrushMap.get(Project.brushes[i]).name, Right, ui.t.CONTEXT_COL);
+						var add = Project.brushes.length > 1 ? 1 : 0;
+						UIMenu.draw(function(ui: Zui) {
+							//var b = Project.brushes[i];
+							ui.text(Project.brushes[i].canvas.name, Right, ui.t.HIGHLIGHT_COL);
 
-							if (ui.button("Delete", Left) && Project.brushes.length > 1) {
+							if (ui.button("Export", Left)) {
+								Context.selectBrush(i);
+								UIFiles.show("arm", true, function(path: String) {
+									var f = UIFiles.filename;
+									if (f == "") f = tr("untitled");
+									ExportArm.runBrush(path + Path.sep + f);
+								});
+							}
+
+							if (ui.button("Duplicate", Left)) {
+								function dupliBrush(_) {
+									iron.App.removeRender(dupliBrush);
+									Context.brush = new BrushSlot();
+									Project.brushes.push(Context.brush);
+									var cloned = Json.parse(Json.stringify(Project.brushes[i].canvas));
+									Context.brush.canvas = cloned;
+									Context.setBrush(Context.brush);
+									RenderUtil.makeBrushPreview();
+								}
+								iron.App.notifyOnRender(dupliBrush);
+							}
+
+							if (Project.brushes.length > 1 && ui.button(tr("Delete"), Left)) {
 								Context.selectBrush(i == 0 ? 1 : 0);
 								Project.brushes.splice(i, 1);
-								UITrait.inst.hwnd1.redraws = 2;
+								UISidebar.inst.hwnd1.redraws = 2;
 							}
-						});
+						}, 3 + add);
 					}
-					if (ui.isHovered) ui.tooltipImage(imgFull);
+					if (ui.isHovered && imgFull != null) ui.tooltipImage(imgFull);
 				}
 
 				ui._y += 6;
-
-				#if (kha_opengl || kha_webgl)
-				ui.imageInvertY = false; // Material preview
-				#end
 			}
 		}
 	}

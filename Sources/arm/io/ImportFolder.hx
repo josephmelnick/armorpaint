@@ -1,39 +1,23 @@
 package arm.io;
 
-import haxe.io.Bytes;
 import zui.Nodes;
 import iron.data.Data;
 import iron.data.MaterialData;
-import arm.ui.UITrait;
-import arm.ui.UINodes;
+import arm.ui.UIHeader;
+import arm.ui.UISidebar;
 import arm.util.RenderUtil;
 import arm.util.MaterialUtil;
-import arm.util.Path;
-import arm.nodes.NodesMaterial;
-import arm.nodes.MaterialParser;
+import arm.sys.Path;
+import arm.sys.File;
+import arm.node.NodesMaterial;
+import arm.node.MaterialParser;
 import arm.data.MaterialSlot;
-import arm.Tool;
-using StringTools;
+import arm.Enums;
 
 class ImportFolder {
 
-	public static function run(path:String) {
-		#if krom_windows
-		var cmd = "dir /b ";
-		var sep = "\\";
-		#else
-		var cmd = "ls ";
-		var sep = "/";
-		#end
-		#if krom_linux
-		var save = "/tmp";
-		#else
-		var save = Krom.savePath();
-		#end
-		save += sep + "dir.txt";
-		Krom.sysCommand(cmd + '"' + path + '"' + ' > ' + '"' + save + '"');
-		var str = Bytes.ofData(Krom.loadBlob(save)).toString();
-		var files = str.split("\n");
+	public static function run(path: String) {
+		var files = File.readDirectory(path);
 		var mapbase = "";
 		var mapopac = "";
 		var mapnor = "";
@@ -41,57 +25,52 @@ class ImportFolder {
 		var maprough = "";
 		var mapmet = "";
 		var mapheight = "";
+
 		// Import maps
 		for (f in files) {
-			if (f.length == 0) continue;
-			f = f.rtrim();
 			if (!Path.isTexture(f)) continue;
-
-			f = path + sep + f;
-			#if krom_windows
-			f = f.replace("/", "\\");
-			#end
 
 			// TODO: handle -albedo
 
 			var base = f.substr(0, f.lastIndexOf(".")).toLowerCase();
 			var valid = false;
-			if (mapbase == "" && Path.isBaseTex(base)) {
+			if (mapbase == "" && Path.isBaseColorTex(base)) {
 				mapbase = f;
 				valid = true;
 			}
-			if (mapopac == "" && Path.isOpacTex(base)) {
+			if (mapopac == "" && Path.isOpacityTex(base)) {
 				mapopac = f;
 				valid = true;
 			}
-			if (mapnor == "" && Path.isNorTex(base)) {
+			if (mapnor == "" && Path.isNormalMapTex(base)) {
 				mapnor = f;
 				valid = true;
 			}
-			if (mapocc == "" && Path.isOccTex(base)) {
+			if (mapocc == "" && Path.isOcclusionTex(base)) {
 				mapocc = f;
 				valid = true;
 			}
-			if (maprough == "" && Path.isRoughTex(base)) {
+			if (maprough == "" && Path.isRoughnessTex(base)) {
 				maprough = f;
 				valid = true;
 			}
-			if (mapmet == "" && Path.isMetTex(base)) {
+			if (mapmet == "" && Path.isMetallicTex(base)) {
 				mapmet = f;
 				valid = true;
 			}
-			if (mapheight == "" && Path.isDispTex(base)) {
+			if (mapheight == "" && Path.isDisplacementTex(base)) {
 				mapheight = f;
 				valid = true;
 			}
 
-			if (valid) ImportTexture.run(f);
+			if (valid) ImportTexture.run(path + Path.sep + f);
 		}
+
 		// Create material
-		var isScene = UITrait.inst.worktab.position == SpaceScene;
+		var isScene = UIHeader.inst.worktab.position == SpaceRender;
 		if (isScene) {
 			MaterialUtil.removeMaterialCache();
-			Data.getMaterial("Scene", "Material2", function(md:MaterialData) {
+			Data.getMaterial("Scene", "Material2", function(md: MaterialData) {
 				Context.materialScene = new MaterialSlot(md);
 				Project.materialsScene.push(Context.materialScene);
 			});
@@ -100,90 +79,58 @@ class ImportFolder {
 			Context.material = new MaterialSlot(Project.materials[0].data);
 			Project.materials.push(Context.material);
 		}
-		UINodes.inst.updateCanvasMap();
-		var nodes = UINodes.inst.nodes;
-		var canvas = UINodes.inst.canvas;
-		var dirs = path.replace("\\", "/").split("/");
+		var nodes = isScene ? Context.materialScene.nodes : Context.material.nodes;
+		var canvas = isScene ? Context.materialScene.canvas : Context.material.canvas;
+		var dirs = path.split(Path.sep);
 		canvas.name = dirs[dirs.length - 1];
-		var nout:TNode = null;
+		var nout: TNode = null;
 		for (n in canvas.nodes) if (n.type == "OUTPUT_MATERIAL_PBR") { nout = n; break; }
 		for (n in canvas.nodes) if (n.name == "RGB") { nodes.removeNode(n, canvas); break; }
 
+		// Place nodes
 		var pos = 0;
 		var startY = 100;
 		var nodeH = 164;
 		if (mapbase != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapbase);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapbase, startY + nodeH * pos, nout.id, 0);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 0 };
-			canvas.links.push(l);
 		}
 		if (mapopac != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapopac);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapopac, startY + nodeH * pos, nout.id, 1);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 1 };
-			canvas.links.push(l);
 		}
 		if (mapocc != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapocc);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapocc, startY + nodeH * pos, nout.id, 2);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 2 };
-			canvas.links.push(l);
 		}
 		if (maprough != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(maprough);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, maprough, startY + nodeH * pos, nout.id, 3);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 3 };
-			canvas.links.push(l);
 		}
 		if (mapmet != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapmet);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapmet, startY + nodeH * pos, nout.id, 4);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 4 };
-			canvas.links.push(l);
 		}
 		if (mapnor != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapnor);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapnor, startY + nodeH * pos, nout.id, 5);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 5 };
-			canvas.links.push(l);
 		}
 		if (mapheight != "") {
-			var n = NodesMaterial.createImageTexture();
-			n.buttons[0].default_value = App.getAssetIndex(mapheight);
-			n.buttons[0].data = App.mapEnum(App.getEnumTexts()[n.buttons[0].default_value]);
-			n.x = 72;
-			n.y = startY + nodeH * pos;
+			placeImageNode(nodes, canvas, mapheight, startY + nodeH * pos, nout.id, 7);
 			pos++;
-			var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: nout.id, to_socket: 7 };
-			canvas.links.push(l);
 		}
+
 		MaterialParser.parsePaintMaterial();
 		RenderUtil.makeMaterialPreview();
-		UITrait.inst.hwnd1.redraws = 2;
+		UISidebar.inst.hwnd1.redraws = 2;
+	}
+
+	static function placeImageNode(nodes: Nodes, canvas: TNodeCanvas, asset: String, ny: Int, to_id: Int, to_socket: Int) {
+		var n = NodesMaterial.createNode("TEX_IMAGE");
+		n.buttons[0].default_value = App.getAssetIndex(asset);
+		n.x = 72;
+		n.y = ny;
+		var l = { id: nodes.getLinkId(canvas.links), from_id: n.id, from_socket: 0, to_id: to_id, to_socket: to_socket };
+		canvas.links.push(l);
 	}
 }

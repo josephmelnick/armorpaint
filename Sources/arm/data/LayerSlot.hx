@@ -3,35 +3,36 @@ package arm.data;
 import kha.graphics4.TextureFormat;
 import kha.Image;
 import iron.RenderPath;
-import iron.object.MeshObject;
-import arm.ui.UITrait;
-import arm.nodes.MaterialParser;
+import arm.ui.UISidebar;
+import arm.node.MaterialParser;
+import arm.Enums;
 
 class LayerSlot {
 	public var id = 0;
 	public var visible = true;
 	public var ext = "";
 
-	public var name:String;
+	public var parent: LayerSlot = null; // Layer inside group
 
-	public var texpaint:Image;
-	public var texpaint_nor:Image;
-	public var texpaint_pack:Image;
+	public var name: String;
 
-	public var texpaint_preview:Image; // Layer preview
+	public var texpaint: Image = null;
+	public var texpaint_nor: Image = null;
+	public var texpaint_pack: Image = null;
 
-	public var texpaint_mask:Image = null; // Texture mask
-	public var texpaint_mask_preview:Image;
+	public var texpaint_preview: Image = null; // Layer preview
+
+	public var texpaint_mask: Image = null; // Texture mask
+	public var texpaint_mask_preview: Image;
 	public var maskOpacity = 1.0; // Opacity mask
-	public var material_mask:MaterialSlot = null; // Fill layer
+	public var material_mask: MaterialSlot = null; // Fill layer
+	public var show_panel = false;
 
-	static var first = true;
-
-	public var blending = 0;
+	public var blending = BlendMix;
 	public var objectMask = 0;
-	public var uvScale = 1.0;
-	public var uvRot = 0.0;
-	public var uvType = 0;
+	public var scale = 1.0;
+	public var angle = 0.0;
+	public var uvType = UVMap;
 	public var paintBase = true;
 	public var paintOpac = true;
 	public var paintOcc = true;
@@ -42,40 +43,27 @@ class LayerSlot {
 	public var paintEmis = true;
 	public var paintSubs = true;
 
-	var createMaskColor:Int;
-	var createMaskImage:Image;
+	var createMaskColor: Int;
+	var createMaskImage: Image;
 
-	public function new(ext = "") {
-
-		if (first) {
-			first = false;
-			{
-				var t = new RenderTargetRaw();
-				t.name = "texpaint_blend0";
-				t.width = Config.getTextureRes();
-				t.height = Config.getTextureRes();
-				t.format = 'R8';
-				RenderPath.active.createRenderTarget(t);
-			}
-			{
-				var t = new RenderTargetRaw();
-				t.name = "texpaint_blend1";
-				t.width = Config.getTextureRes();
-				t.height = Config.getTextureRes();
-				t.format = 'R8';
-				RenderPath.active.createRenderTarget(t);
-			}
-		}
-
+	public function new(ext = "", isGroup = false) {
 		if (ext == "") {
 			id = 0;
 			for (l in Project.layers) if (l.id >= id) id = l.id + 1;
 			ext = id + "";
 		}
+
 		this.ext = ext;
+
+		if (isGroup) {
+			name = "Group " + (id + 1);
+			return;
+		}
+
 		name = "Layer " + (id + 1);
-		var format = UITrait.inst.bitsHandle.position == 0 ? 'RGBA32' :
-					 UITrait.inst.bitsHandle.position == 1 ? 'RGBA64' : 'RGBA128';
+		var format = App.bitsHandle.position == Bits8  ? "RGBA32" :
+					 App.bitsHandle.position == Bits16 ? "RGBA64" :
+					 									 "RGBA128";
 
 		{
 			var t = new RenderTargetRaw();
@@ -107,13 +95,17 @@ class LayerSlot {
 
 	public function delete() {
 		unload();
+		var children = getChildren();
+		if (children != null) for (c in children) c.parent = null;
 		var lpos = Project.layers.indexOf(this);
 		Project.layers.remove(this);
 		// Undo can remove base layer and then restore it from undo layers
-		if (lpos > 0) Context.setLayer(Project.layers[lpos - 1]);
+		Context.setLayer(Project.layers[lpos > 0 ? lpos - 1 : 0]);
 	}
 
 	public function unload() {
+		if (texpaint == null) return; // Layer is group
+
 		texpaint.unload();
 		texpaint_nor.unload();
 		texpaint_pack.unload();
@@ -127,7 +119,7 @@ class LayerSlot {
 		deleteMask();
 	}
 
-	public function swap(other:LayerSlot) {
+	public function swap(other: LayerSlot) {
 		RenderPath.active.renderTargets.get("texpaint" + ext).image = other.texpaint;
 		RenderPath.active.renderTargets.get("texpaint_nor" + ext).image = other.texpaint_nor;
 		RenderPath.active.renderTargets.get("texpaint_pack" + ext).image = other.texpaint_pack;
@@ -136,26 +128,26 @@ class LayerSlot {
 		RenderPath.active.renderTargets.get("texpaint_nor" + other.ext).image = texpaint_nor;
 		RenderPath.active.renderTargets.get("texpaint_pack" + other.ext).image = texpaint_pack;
 
-		var tp = texpaint;
-		var tp_nor = texpaint_nor;
-		var tp_pack = texpaint_pack;
+		var _texpaint = texpaint;
+		var _texpaint_nor = texpaint_nor;
+		var _texpaint_pack = texpaint_pack;
 		texpaint = other.texpaint;
 		texpaint_nor = other.texpaint_nor;
 		texpaint_pack = other.texpaint_pack;
-		other.texpaint = tp;
-		other.texpaint_nor = tp_nor;
-		other.texpaint_pack = tp_pack;
+		other.texpaint = _texpaint;
+		other.texpaint_nor = _texpaint_nor;
+		other.texpaint_pack = _texpaint_pack;
 	}
 
-	public function swapMask(other:LayerSlot) {
+	public function swapMask(other: LayerSlot) {
 		RenderPath.active.renderTargets.get("texpaint_mask" + ext).image = other.texpaint_mask;
 		RenderPath.active.renderTargets.get("texpaint_mask" + other.ext).image = texpaint_mask;
-		var tp_mask = texpaint_mask;
+		var _texpaint_mask = texpaint_mask;
 		texpaint_mask = other.texpaint_mask;
-		other.texpaint_mask = tp_mask;
+		other.texpaint_mask = _texpaint_mask;
 	}
 
-	public function createMask(color:Int, clear = true, image:Image = null) {
+	public function createMask(color: Int, clear = true, image: Image = null) {
 		if (texpaint_mask != null) return;
 
 		{
@@ -163,7 +155,7 @@ class LayerSlot {
 			t.name = "texpaint_mask" + ext;
 			t.width = Config.getTextureRes();
 			t.height = Config.getTextureRes();
-			t.format = 'R8';
+			t.format = "R8";
 			texpaint_mask = RenderPath.active.createRenderTarget(t).image;
 		}
 
@@ -176,13 +168,17 @@ class LayerSlot {
 		}
 	}
 
-	function clearMask(g:kha.graphics4.Graphics) {
+	function clearMask(g: kha.graphics4.Graphics) {
 		g.end();
 
-		texpaint_mask.g2.begin();
+		texpaint_mask.g2.begin(false);
 
-		if (createMaskImage != null) texpaint_mask.g2.drawScaledImage(createMaskImage, 0, 0, texpaint_mask.width, texpaint_mask.height);
-		else texpaint_mask.g2.clear(createMaskColor);
+		if (createMaskImage != null) {
+			texpaint_mask.g2.drawScaledImage(createMaskImage, 0, 0, texpaint_mask.width, texpaint_mask.height);
+		}
+		else {
+			texpaint_mask.g2.clear(createMaskColor);
+		}
 		texpaint_mask.g2.end();
 
 		g.begin();
@@ -206,13 +202,14 @@ class LayerSlot {
 	public function applyMask() {
 		if (texpaint_mask == null) return;
 
-		if (Layers.pipe == null) Layers.makePipe();
+		if (Layers.pipeMerge == null) Layers.makePipe();
 		Layers.makeTempImg();
 
 		// Copy layer to temp
 		Layers.imga.g2.begin(false);
 		Layers.imga.g2.pipeline = Layers.pipeCopy;
 		Layers.imga.g2.drawImage(texpaint, 0, 0);
+		Layers.imga.g2.pipeline = null;
 		Layers.imga.g2.end();
 
 		// Merge mask
@@ -229,7 +226,7 @@ class LayerSlot {
 		deleteMask();
 	}
 
-	public function duplicate() {
+	public function duplicate(): LayerSlot {
 		var layers = Project.layers;
 		var i = 0;
 		while (i++ < layers.length) if (layers[i] == this) break;
@@ -238,33 +235,41 @@ class LayerSlot {
 		var l = new LayerSlot();
 		layers.insert(i, l);
 
-		if (Layers.pipe == null) Layers.makePipe();
+		if (Layers.pipeMerge == null) Layers.makePipe();
 		l.texpaint.g2.begin(false);
 		l.texpaint.g2.pipeline = Layers.pipeCopy;
 		l.texpaint.g2.drawImage(texpaint, 0, 0);
+		l.texpaint.g2.pipeline = null;
 		l.texpaint.g2.end();
 		l.texpaint_nor.g2.begin(false);
 		l.texpaint_nor.g2.pipeline = Layers.pipeCopy;
 		l.texpaint_nor.g2.drawImage(texpaint_nor, 0, 0);
+		l.texpaint_nor.g2.pipeline = null;
 		l.texpaint_nor.g2.end();
 		l.texpaint_pack.g2.begin(false);
 		l.texpaint_pack.g2.pipeline = Layers.pipeCopy;
 		l.texpaint_pack.g2.drawImage(texpaint_pack, 0, 0);
+		l.texpaint_pack.g2.pipeline = null;
 		l.texpaint_pack.g2.end();
 
-		l.texpaint_preview.g2.begin(true, 0xff000000);
+		l.texpaint_preview.g2.begin(true, 0x00000000);
+		l.texpaint_preview.g2.pipeline = Layers.pipeCopy;
 		l.texpaint_preview.g2.drawScaledImage(texpaint_preview, 0, 0, texpaint_preview.width, texpaint_preview.height);
+		l.texpaint_preview.g2.pipeline = null;
 		l.texpaint_preview.g2.end();
 
 		if (texpaint_mask != null) {
 			l.createMask(0, false);
 			l.texpaint_mask.g2.begin(false);
-			l.texpaint_mask.g2.pipeline = Layers.pipeCopy;
+			l.texpaint_mask.g2.pipeline = Layers.pipeCopy8;
 			l.texpaint_mask.g2.drawImage(texpaint_mask, 0, 0);
+			l.texpaint_mask.g2.pipeline = null;
 			l.texpaint_mask.g2.end();
 
-			l.texpaint_mask_preview.g2.begin(true, 0xff000000);
+			l.texpaint_mask_preview.g2.begin(true, 0x00000000);
+			l.texpaint_mask_preview.g2.pipeline = Layers.pipeCopy8;
 			l.texpaint_mask_preview.g2.drawScaledImage(texpaint_mask_preview, 0, 0, texpaint_mask_preview.width, texpaint_mask_preview.height);
+			l.texpaint_mask_preview.g2.pipeline = null;
 			l.texpaint_mask_preview.g2.end();
 		}
 
@@ -287,8 +292,9 @@ class LayerSlot {
 	}
 
 	public function resizeAndSetBits() {
-		var format = UITrait.inst.bitsHandle.position == 0 ? TextureFormat.RGBA32 :
-					 UITrait.inst.bitsHandle.position == 1 ? TextureFormat.RGBA64 : TextureFormat.RGBA128;
+		var format = App.bitsHandle.position == Bits8  ? TextureFormat.RGBA32 :
+					 App.bitsHandle.position == Bits16 ? TextureFormat.RGBA64 :
+					 									 TextureFormat.RGBA128;
 
 		var res = Config.getTextureRes();
 		var rts = RenderPath.active.renderTargets;
@@ -301,21 +307,31 @@ class LayerSlot {
 		this.texpaint_nor = Image.createRenderTarget(res, res, format);
 		this.texpaint_pack = Image.createRenderTarget(res, res, format);
 
+		if (Layers.pipeMerge == null) Layers.makePipe();
+
 		this.texpaint.g2.begin(false);
+		this.texpaint.g2.pipeline = Layers.pipeCopy;
 		this.texpaint.g2.drawScaledImage(texpaint, 0, 0, res, res);
+		this.texpaint.g2.pipeline = null;
 		this.texpaint.g2.end();
 
 		this.texpaint_nor.g2.begin(false);
+		this.texpaint_nor.g2.pipeline = Layers.pipeCopy;
 		this.texpaint_nor.g2.drawScaledImage(texpaint_nor, 0, 0, res, res);
+		this.texpaint_nor.g2.pipeline = null;
 		this.texpaint_nor.g2.end();
 
 		this.texpaint_pack.g2.begin(false);
+		this.texpaint_pack.g2.pipeline = Layers.pipeCopy;
 		this.texpaint_pack.g2.drawScaledImage(texpaint_pack, 0, 0, res, res);
+		this.texpaint_pack.g2.pipeline = null;
 		this.texpaint_pack.g2.end();
 
-		texpaint.unload();
-		texpaint_nor.unload();
-		texpaint_pack.unload();
+		iron.App.notifyOnInit(function() { // Out of command list execution
+			texpaint.unload();
+			texpaint_nor.unload();
+			texpaint_pack.unload();
+		});
 
 		rts.get("texpaint" + this.ext).image = this.texpaint;
 		rts.get("texpaint_nor" + this.ext).image = this.texpaint_nor;
@@ -326,16 +342,20 @@ class LayerSlot {
 			this.texpaint_mask = Image.createRenderTarget(res, res, TextureFormat.L8);
 
 			this.texpaint_mask.g2.begin(false);
+			this.texpaint_mask.g2.pipeline = Layers.pipeCopy8;
 			this.texpaint_mask.g2.drawScaledImage(texpaint_mask, 0, 0, res, res);
+			this.texpaint_mask.g2.pipeline = null;
 			this.texpaint_mask.g2.end();
 
-			texpaint_mask.unload();
+			iron.App.notifyOnInit(function() { // Out of command list execution
+				texpaint_mask.unload();
+			});
 
 			rts.get("texpaint_mask" + this.ext).image = this.texpaint_mask;
 		}
 	}
 
-	public function clear(g:kha.graphics4.Graphics) {
+	public function clear(g: kha.graphics4.Graphics) {
 		g.end();
 
 		texpaint.g4.begin();
@@ -362,9 +382,13 @@ class LayerSlot {
 		Context.setLayer(this);
 		material_mask = Context.material;
 		Layers.updateFillLayers(4);
-		MaterialParser.parsePaintMaterial();
-		Context.layerPreviewDirty = true;
-		UITrait.inst.hwnd.redraws = 2;
+		function _parse(_) {
+			MaterialParser.parsePaintMaterial();
+			Context.layerPreviewDirty = true;
+			UISidebar.inst.hwnd.redraws = 2;
+			iron.App.removeRender(_parse);
+		}
+		iron.App.notifyOnRender(_parse);
 	}
 
 	public function toPaintLayer() {
@@ -372,6 +396,21 @@ class LayerSlot {
 		material_mask = null;
 		MaterialParser.parsePaintMaterial();
 		Context.layerPreviewDirty = true;
-		UITrait.inst.hwnd.redraws = 2;
+		UISidebar.inst.hwnd.redraws = 2;
+	}
+
+	public function isVisible(): Bool {
+		return visible && (parent == null || parent.visible);
+	}
+
+	public function getChildren(): Array<LayerSlot> {
+		var children: Array<LayerSlot> = null; // Layer with children is a group
+		for (l in Project.layers) {
+			if (l.parent == this) {
+				if (children == null) children = [];
+				children.push(l);
+			}
+		}
+		return children;
 	}
 }

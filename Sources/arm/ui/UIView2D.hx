@@ -3,36 +3,38 @@ package arm.ui;
 import kha.System;
 import kha.Image;
 import kha.graphics4.PipelineState;
-import kha.graphics4.VertexShader;
-import kha.graphics4.FragmentShader;
 import kha.graphics4.VertexStructure;
 import kha.graphics4.VertexData;
 import kha.graphics4.BlendingFactor;
+import kha.graphics4.ConstantLocation;
 import zui.Zui;
 import zui.Id;
 import iron.system.Input;
 import arm.util.UVUtil;
-import arm.data.ConstData;
-import arm.Tool;
+import arm.util.RenderUtil;
+import arm.render.RenderPathPaint;
+import arm.Enums;
 
 @:access(zui.Zui)
 class UIView2D {
 
-	public static var inst:UIView2D;
+	public static var inst: UIView2D;
 	public var show = false;
-	public var type = 0; // Layer, texture
-	public var wx:Int;
-	public var wy:Int;
-	public var ww:Int;
-	public var wh:Int;
-	public var ui:Zui;
+	public var type = View2DLayer;
+	public var wx: Int;
+	public var wy: Int;
+	public var ww: Int;
+	public var wh: Int;
+	public var ui: Zui;
 	public var hwnd = Id.handle();
 	public var panX = 0.0;
 	public var panY = 0.0;
 	public var panScale = 1.0;
-	var pipe:PipelineState;
-	var texType = 0;
+	public var pipe: PipelineState;
+	public var channelLocation: ConstantLocation;
+	var texType = TexBase;
 	var uvmapShow = false;
+	var tiledShow = false;
 
 	public function new() {
 		inst = this;
@@ -49,21 +51,19 @@ class UIView2D {
 		pipe.blendDestination = BlendingFactor.BlendZero;
 		pipe.colorWriteMaskAlpha = false;
 		pipe.compile();
+		channelLocation = pipe.getConstantLocation("channel");
 
 		var scale = Config.raw.window_scale;
-		ui = new Zui({font: App.font, theme: App.theme, color_wheel: App.color_wheel, scaleFactor: scale});
+		ui = new Zui({font: App.font, theme: App.theme, color_wheel: App.colorWheel, scaleFactor: scale});
 		ui.scrollEnabled = false;
-
-		iron.App.notifyOnRender2D(render);
-		iron.App.notifyOnUpdate(update);
 	}
 
-	function render(g:kha.graphics2.Graphics) {
+	public function render(g: kha.graphics2.Graphics) {
 		if (UINodes.inst.defaultWindowW == 0) UINodes.inst.defaultWindowW = Std.int(iron.App.w() / 2);
 		if (UINodes.inst.defaultWindowH == 0) UINodes.inst.defaultWindowH = Std.int(iron.App.h() / 2);
 		ww = UINodes.inst.defaultWindowW;
-		wx = Std.int(iron.App.w()) + UITrait.inst.toolbarw;
-		wy = UITrait.inst.headerh * 2;
+		wx = Std.int(iron.App.w()) + UIToolbar.inst.toolbarw;
+		wy = UIHeader.inst.headerh * 2;
 
 		if (!show) return;
 		if (System.windowWidth() == 0 || System.windowHeight() == 0) return;
@@ -82,6 +82,9 @@ class UIView2D {
 		// Ensure UV map is drawn
 		if (uvmapShow) UVUtil.cacheUVMap();
 
+		// Ensure font image is drawn
+		if (Context.font.image == null) RenderUtil.makeFontPreview();
+
 		ui.begin(g);
 		wh = iron.App.h();
 		if (UINodes.inst.show) {
@@ -94,33 +97,77 @@ class UIView2D {
 			ui.g.drawImage(UINodes.inst.grid, (panX * panScale) % 40 - 40, (panY * panScale) % 40 - 40);
 
 			// Texture
-			ui.g.pipeline = pipe;
 			var l = Context.layer;
-			var tex:Image = null;
+			var tex: Image = null;
+			var channel = 0;
 
-			if (type == 0) { // Layer
-				tex = texType == 0 ? l.texpaint : texType == 1 ? l.texpaint_nor : l.texpaint_pack;
-				if (Context.layerIsMask) tex = l.texpaint_mask;
+			if (type == View2DLayer) {
+				var layer = l.getChildren() == null ? l : l.getChildren()[0];
+				if (Config.raw.brush_live && RenderPathPaint.liveLayerDrawn > 0) {
+					layer = RenderPathPaint.liveLayer;
+				}
+				tex =
+					Context.layerIsMask   ? layer.texpaint_mask :
+					texType == TexBase    ? layer.texpaint :
+					texType == TexOpacity ? layer.texpaint :
+					texType == TexNormal  ? layer.texpaint_nor :
+										    layer.texpaint_pack;
+
+				channel =
+					Context.layerIsMask     ? 1 :
+					texType == TexOcclusion ? 1 :
+					texType == TexRoughness ? 2 :
+					texType == TexMetallic  ? 3 :
+					texType == TexOpacity   ? 4 :
+					texType == TexNormal    ? 5 :
+											  0;
 			}
-			else { // Texture
-				tex = UITrait.inst.getImage(Context.texture);
+			else if (type == View2DAsset) {
+				tex = UISidebar.inst.getImage(Context.texture);
+			}
+			else { // View2DFont
+				tex = Context.font.image;
+				tw = tex.width;
 			}
 
 			var th = tw;
 			if (tex != null) {
 				th = tw * (tex.height / tex.width);
-				if (!UITrait.inst.textureFilter) {
-					ui.g.imageScaleQuality = kha.graphics2.ImageScaleQuality.Low;
+
+				if (type == View2DLayer) {
+					ui.g.pipeline = pipe;
+					if (!Context.textureFilter) {
+						ui.g.imageScaleQuality = kha.graphics2.ImageScaleQuality.Low;
+					}
+					#if kha_opengl
+					ui.currentWindow.texture.g4.setPipeline(pipe);
+					#end
+					ui.currentWindow.texture.g4.setInt(channelLocation, channel);
 				}
+
 				ui.g.drawScaledImage(tex, tx, ty, tw, th);
-				if (!UITrait.inst.textureFilter) {
-					ui.g.imageScaleQuality = kha.graphics2.ImageScaleQuality.High;
+
+				if (tiledShow) {
+					ui.g.drawScaledImage(tex, tx - tw, ty, tw, th);
+					ui.g.drawScaledImage(tex, tx - tw, ty - th, tw, th);
+					ui.g.drawScaledImage(tex, tx - tw, ty + th, tw, th);
+					ui.g.drawScaledImage(tex, tx + tw, ty, tw, th);
+					ui.g.drawScaledImage(tex, tx + tw, ty - th, tw, th);
+					ui.g.drawScaledImage(tex, tx + tw, ty + th, tw, th);
+					ui.g.drawScaledImage(tex, tx, ty - th, tw, th);
+					ui.g.drawScaledImage(tex, tx, ty + th, tw, th);
+				}
+
+				if (type == View2DLayer) {
+					ui.g.pipeline = null;
+					if (!Context.textureFilter) {
+						ui.g.imageScaleQuality = kha.graphics2.ImageScaleQuality.High;
+					}
 				}
 			}
-			ui.g.pipeline = null;
 
 			// UV map
-			if (type == 0 && uvmapShow) {
+			if (type == View2DLayer && uvmapShow) {
 				ui.g.drawScaledImage(UVUtil.uvmap, tx, ty, tw, th);
 			}
 
@@ -138,11 +185,11 @@ class UIView2D {
 			ui._w = Std.int(ui.ELEMENT_W() * 1.4);
 			var h = Id.handle();
 
-			if (type == 0) {
+			if (type == View2DLayer) {
 				h.text = l.name;
 				l.name = ui.textInput(h, "", Right);
 			}
-			else {
+			else if (type == View2DAsset) {
 				var asset = Context.texture;
 				if (asset != null) {
 					var assetNames = Project.assetNames;
@@ -152,54 +199,75 @@ class UIView2D {
 					assetNames[i] = asset.name;
 				}
 			}
+			else { // View2DFont
+				h.text = Context.font.name;
+				Context.font.name = ui.textInput(h, "", Right);
+			}
 
-			if (h.changed) UITrait.inst.hwnd.redraws = 2;
+			if (h.changed) UISidebar.inst.hwnd.redraws = 2;
 			ui.t.ACCENT_COL = ACCENT_COL;
 			ui.t.BUTTON_H = BUTTON_H;
 			ui.t.ELEMENT_H = ELEMENT_H;
 			ui.fontSize = FONT_SIZE;
 
 			// Controls
-			if (type == 0) {
-				var ew = Std.int(ui.ELEMENT_W());
-				ui.g.color = ui.t.WINDOW_BG_COL;
-				ui.g.fillRect(0, 0, ww, ui.ELEMENT_H() + ui.ELEMENT_OFFSET());
-				ui.g.color = 0xffffffff;
-				ui._x = 2;
-				ui._y = 2;
-				ui._w = ew;
-				texType = ui.combo(Id.handle({position: texType}), ["Base", "Normal Map", "ORM"], "Texture");
-				ui._x += ew + 3;
-				ui._y = 2;
-				uvmapShow = ui.check(Id.handle({selected: uvmapShow}), "UV Map");
+			var ew = Std.int(ui.ELEMENT_W());
+			ui.g.color = ui.t.WINDOW_BG_COL;
+			ui.g.fillRect(0, 0, ww, ui.ELEMENT_H() + ui.ELEMENT_OFFSET());
+			ui.g.color = 0xffffffff;
+			ui._x = 2;
+			ui._y = 2;
+			ui._w = ew;
+
+			if (type == View2DLayer) {
+				if (!Context.layerIsMask) {
+					texType = ui.combo(Id.handle({position: texType}), [
+						tr("Base Color"),
+						tr("Normal Map"),
+						tr("Occlusion"),
+						tr("Roughness"),
+						tr("Metallic"),
+						tr("Opacity"),
+					], tr("Texture"));
+					ui._x += ew + 3;
+					ui._y = 2;
+				}
+
+				uvmapShow = ui.check(Id.handle({selected: uvmapShow}), tr("UV Map"));
 				ui._x += ew + 3;
 				ui._y = 2;
 			}
 
+			tiledShow = ui.check(Id.handle({selected: tiledShow}), tr("Tiled"));
+
 			if (Context.tool == ToolPicker) {
-				var cursorImg = Res.get('cursor.png');
-				ui.g.drawScaledImage(cursorImg, tx + tw * UITrait.inst.uvxPicked - 16, ty + th * UITrait.inst.uvyPicked - 16, 32, 32);
+				var cursorImg = Res.get("cursor.k");
+				var hsize = 16 * ui.SCALE();
+				var size = hsize * 2;
+				ui.g.drawScaledImage(cursorImg, tx + tw * Context.uvxPicked - hsize, ty + th * Context.uvyPicked - hsize, size, size);
 			}
 		}
 		ui.end();
 		g.begin(false);
 	}
 
-	function update() {
+	public function update() {
 		var mouse = Input.getMouse();
 		var kb = Input.getKeyboard();
 
 		var headerh = ui.ELEMENT_H() * 1.4;
-		UITrait.inst.paint2d = false;
+		Context.paint2d = false;
 
-		if (!App.uienabled ||
+		if (!App.uiEnabled ||
 			!show ||
 			mouse.x < wx ||
 			mouse.x > wx + ww ||
 			mouse.y < wy + headerh ||
-			mouse.y > wy + wh) return;
+			mouse.y > wy + wh) {
+			return;
+		}
 
-		if (mouse.down("right") || mouse.down("middle")) {
+		if (mouse.down("right") || mouse.down("middle") || (mouse.down("left") && kb.down("alt"))) {
 			panX += mouse.movementX;
 			panY += mouse.movementY;
 		}
@@ -209,10 +277,14 @@ class UIView2D {
 			if (panScale > 3.0) panScale = 3.0;
 		}
 
-		if (type == 0 &&
-			(Operator.shortcut(Config.keymap.action_paint) ||
-			 Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint))) {
-			UITrait.inst.paint2d = true;
+		var setCloneSource = Context.tool == ToolClone && Operator.shortcut(Config.keymap.set_clone_source + "+" + Config.keymap.action_paint, ShortcutDown);
+
+		if (type == View2DLayer &&
+			(Operator.shortcut(Config.keymap.action_paint, ShortcutDown) ||
+			 Operator.shortcut(Config.keymap.brush_ruler + "+" + Config.keymap.action_paint, ShortcutDown) ||
+			 setCloneSource ||
+			 Config.raw.brush_live)) {
+			Context.paint2d = true;
 		}
 
 		if (ui.isTyping) return;

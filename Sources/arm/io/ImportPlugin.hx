@@ -1,33 +1,20 @@
 package arm.io;
 
-import iron.data.Data;
-import arm.util.Path;
-using StringTools;
+import arm.sys.Path;
+import arm.sys.File;
 
 class ImportPlugin {
 
-	public static function run(path:String) {
+	public static function run(path: String) {
 		if (!Path.isPlugin(path)) {
-			Log.showError(Strings.error1);
+			Log.error(Strings.error1);
 			return;
 		}
 
-		#if krom_windows
-		var sep = "\\";
-		var copy = "copy";
-		var dataPath = Data.dataPath.replace("/", "\\");
-		#else
-		var sep = "/";
-		var copy = "cp";
-		var dataPath = Data.dataPath;
-		#end
-
-		var filename = path.substr(path.lastIndexOf(sep) + 1);
-		var dest = Krom.getFilesLocation() + sep + dataPath + sep + "plugins" + sep + filename;
-
-		Krom.sysCommand(copy + ' ' + path + ' ' + dest); // Copy to plugin folder
-		arm.ui.BoxPreferences.files = null; // Refresh file list
-
-		Log.showMessage("Plugin '" + filename + "' installed.");
+		var filename = path.substr(path.lastIndexOf(Path.sep) + 1);
+		var dstPath = Path.data() + Path.sep + "plugins" + Path.sep + filename;
+		File.copy(path, dstPath); // Copy to plugin folder
+		arm.ui.BoxPreferences.filesPlugin = null; // Refresh file list
+		Log.info("Plugin '" + filename + "' imported.");
 	}
 }
