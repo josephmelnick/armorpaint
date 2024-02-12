@@ -1,78 +1,34 @@
-![](https://armorpaint.org/img/git.jpg)
+![](https://armorpaint.org/img/git_root.jpg)
 
-armorpaint
+armortools
 ==============
 
-[ArmorPaint](https://armorpaint.org) is a software for 3D PBR texture painting - check out the [manual](https://armorpaint.org/manual).
+3D content creation tools.
 
-*Note 1: This repository is aimed at developers and may not be stable. Distributed binaries are currently [paid](https://armorpaint.org/download) to help with the project funding. All of the development is happening here in order to make it accessible to everyone. Thank you for support!*
+[armorpaint/](https://github.com/armory3d/armortools/tree/main/armorpaint)<br>
+[armorlab/](https://github.com/armory3d/armortools/tree/main/armorlab)
 
-*Note 2: If you are compiling git version of ArmorPaint, then you need to have a compiler ([Visual Studio](https://visualstudio.microsoft.com/downloads/) - Windows, [clang](https://clang.llvm.org/get_started.html) + [deps](https://github.com/Kode/Kha/wiki/Linux) - Linux, [Xcode](https://developer.apple.com/xcode/resources/) - macOS / iOS, [Android Studio](https://developer.android.com/studio) - Android), [nodejs](https://nodejs.org/en/download/) and [git](https://git-scm.com/downloads) installed. Learn more about [Kha](https://github.com/Kode/Kha/wiki), [Kinc](https://github.com/Kode/Kinc/wiki) and [Krom](https://github.com/Kode/Krom/blob/master/readme.md).*
+**Updating cloned repository**
 ```bash
-git clone --recursive https://github.com/armory3d/armorpaint
-cd armorpaint
-```
-```bash
-# Windows
-node Kromx/make -g direct3d11
-cd Kromx
-# Unpack `v8\libraries\win32\release\v8_monolith.7z` using 7-Zip - Extract Here (exceeds 100MB)
-node Kinc/make -g direct3d11
-# Open generated Visual Studio project
-# Set `Project - Properties - Debugging - Command Arguments` to `..\..\build\krom`
-# Build for x64 & release
-```
-```bash
-# Linux
-node Kromx/make -g opengl
-cd Kromx
-node Kinc/make -g opengl --compiler clang --compile
-cd Deployment
-strip Krom
-./Krom ../../build/krom
-```
-```bash
-# macOS - wip
-node Kromx/make -g metal
-cp -a build/krom/ Kromx/Deployment
-cd Kromx
-node Kinc/make -g metal
-# Open generated Xcode project
-# Add `path/to/armorpaint/Kromx/v8/libraries/macos/release` into `Project - Krom - Build Settings - Search Paths - Library Search Paths`
-# Build
-```
-```bash
-# Android - wip
-node Kromx/make android -g opengl --shaderversion 300
-cd Kromx
-node Kinc/make android -g opengl
-# Manual tweaking is required for now:
-# https://github.com/armory3d/Kromx/blob/master/kincfile.js#L68
-# Open generated Android Studio project
-# Build for device
-```
-```bash
-# iOS - wip
-node Kromx/make ios -g metal
-cp -a build/krom/ Kromx/Deployment
-cd Kromx
-node Kinc/make ios -g metal
-# Open generated Xcode project
-# Add `path/to/Kromx/v8/libraries/ios/release` into `Project - Krom - Build Settings - Search Paths - Library Search Paths`
-# Build for device
-```
-```bash
-# Windows DXR - wip
-node Kromx/make -g direct3d12
-cd Kromx
-# Unpack `v8\libraries\win32\release\v8_monolith.7z` using 7-Zip - Extract Here (exceeds 100MB)
-node Kinc/make -g direct3d12 --raytrace dxr
-# Open generated Visual Studio project
-# Set `Project - Properties - Debugging - Command Arguments` to `..\..\build\krom`
-# Build for x64 & release
-```
-```bash
-# Updating cloned repository
-git pull origin master
+git pull origin main
 git submodule update --init --recursive
+# Delete `armorpaint/build` directory if present
+```
+
+**Generating a locale file**
+```bash
+export ARM_LOCALE=<locale code>
+./armorcore/Kinc/make --from base/Tools --kfile extract_locales.js
+# Generates a `base/Assets/locale/<locale code>.json` file
+```
+
+**Release builds** *Optional, used for best performance*
+```bash
+# Compile krom.js using the closure compiler
+https://developers.google.com/closure/compiler
+# Generate a v8 snapshot file
+export ARM_SNAPSHOT=1
+../armorcore/Kinc/make --from ../armorcore -g api
+./ArmorPaint . --snapshot
+# Generates a `krom.bin` file from `krom.js` file
 ```
