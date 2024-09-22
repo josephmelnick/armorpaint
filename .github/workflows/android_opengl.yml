@@ -20,4 +20,4 @@ jobs:
     - name: Compile
       run: |
         cd armorpaint
-        ../armorcore/Kinc/make --from ../armorcore android -g opengl
+        ../armorcore/make --target android --graphics opengl

@@ -1,13 +1,13 @@
 
 let flags = globalThis.flags;
-flags.android = process.argv.indexOf("android") >= 0;
-flags.ios = process.argv.indexOf("ios") >= 0;
-flags.d3d12 = process.argv.indexOf("direct3d12") >= 0;
-flags.vulkan = process.argv.indexOf("vulkan") >= 0;
-flags.metal = process.argv.indexOf("metal") >= 0;
+flags.android = os_argv().indexOf("android") >= 0;
+flags.ios = os_argv().indexOf("ios") >= 0;
+flags.d3d12 = os_argv().indexOf("direct3d12") >= 0;
+flags.vulkan = os_argv().indexOf("vulkan") >= 0;
+flags.metal = os_argv().indexOf("metal") >= 0;
 flags.raytrace = flags.d3d12 || flags.vulkan || flags.metal;
-flags.snapshot = process.argv.indexOf("--snapshot") >= 0;
-flags.physics = true;
+flags.embed = os_argv().indexOf("--embed") >= 0; // os_argv().indexOf("--debug") == -1; // clang 19
+flags.physics = os_argv().indexOf("--debug") == -1;
 flags.voxels = !flags.raytrace && !flags.android && !flags.ios;
 
 flags.with_d3dcompiler = true;
@@ -17,109 +17,117 @@ flags.with_zlib = true;
 flags.with_stb_image_write = true;
 flags.with_g2 = true;
 flags.with_iron = true;
-flags.with_zui = true;
+flags.with_ui = true;
+flags.with_eval = true;
 
-flags.on_c_project_created = async function(c_project, platform, graphics) {
-	c_project.addDefine("IDLE_SLEEP");
+let project = new Project("Base");
+
+{
+	project.add_define("IDLE_SLEEP");
 	let dir = flags.name.toLowerCase();
 
 	if (graphics === "vulkan") {
-		c_project.addDefine("KORE_VKRT");
-		await c_project.addProject("../" + dir + "/glsl_to_spirv");
+		project.add_define("KINC_VKRT");
+		project.add_project("../armorcore/tools/ashader/to_spirv");
 	}
 
 	if (flags.with_onnx) {
-		c_project.addDefine("WITH_ONNX");
-		c_project.addIncludeDir("../" + dir + "/onnx/include");
-		console.log(platform);
+		project.add_define("WITH_ONNX");
+		project.add_include_dir("../" + dir + "/onnx/include");
 		if (platform === "win32") {
-			c_project.addLib("../" + dir + "/onnx/win32/onnxruntime");
+			project.add_lib("../" + dir + "/onnx/win32/onnxruntime");
 		}
 		else if (platform === "linux") {
 			// patchelf --set-rpath . ArmorLab
-			c_project.addLib("onnxruntime -L" + flags.dirname + "/../" + dir + "/onnx/linux");
-			// c_project.addLib("onnxruntime_providers_cuda");
-			// c_project.addLib("onnxruntime_providers_shared");
-			// c_project.addLib("cublasLt");
-			// c_project.addLib("cublas");
-			// c_project.addLib("cudart");
-			// c_project.addLib("cudnn");
-			// c_project.addLib("cufft");
-			// c_project.addLib("curand");
+			project.add_lib("onnxruntime -L" + flags.dirname + "/../" + dir + "/onnx/linux");
+			// project.add_lib("onnxruntime_providers_cuda");
+			// project.add_lib("onnxruntime_providers_shared");
+			// project.add_lib("cublasLt");
+			// project.add_lib("cublas");
+			// project.add_lib("cudart");
+			// project.add_lib("cudnn");
+			// project.add_lib("cufft");
+			// project.add_lib("curand");
 		}
-		else if (platform === "osx") {
-			c_project.addLib("../" + dir + "/onnx/macos/libonnxruntime.1.14.1.dylib");
+		else if (platform === "macos") {
+			project.add_lib("../" + dir + "/onnx/macos/libonnxruntime.1.14.1.dylib");
 		}
 	}
 
-	await c_project.addProject("../" + dir + "/Plugins");
-};
+	project.add_define('WITH_PLUGINS');
+	project.add_cfiles("sources/plugin_api.c");
+	project.add_project("../" + dir + "/plugins");
+}
 
-let project = new Project("Base");
-project.addSources("Sources");
-project.addSources("Sources/nodes");
-project.addShaders("../armorcore/Shaders/*.glsl", { embed: flags.snapshot });
-project.addShaders("Shaders/*.glsl", { embed: flags.snapshot });
-project.addAssets("Assets/*", { destination: "data/{name}", embed: flags.snapshot });
-project.addAssets("Assets/locale/*", { destination: "data/locale/{name}" });
-project.addAssets("Assets/licenses/**", { destination: "data/licenses/{name}" });
-project.addAssets("Assets/plugins/*", { destination: "data/plugins/{name}" });
-project.addAssets("Assets/themes/*.json", { destination: "data/themes/{name}" });
+project.add_project("../armorcore");
+project.add_tsfiles("sources");
+project.add_tsfiles("sources/nodes");
+project.add_shaders("../armorcore/shaders/*.glsl");
+project.add_shaders("shaders/*.glsl");
+project.add_assets("assets/*", { destination: "data/{name}" });
+project.add_assets("assets/locale/*", { destination: "data/locale/{name}" });
+project.add_assets("assets/licenses/**", { destination: "data/licenses/{name}" });
+project.add_assets("assets/plugins/*", { destination: "data/plugins/{name}" });
+project.add_assets("assets/themes/*.json", { destination: "data/themes/{name}" });
 
-if (flags.snapshot) {
-	project.addDefine("arm_snapshot");
-	project.addDefine("arm_image_embed");
-	project.addDefine("arm_shader_embed");
+if (flags.embed) {
+	project.add_define("WITH_EMBED");
+	project.add_define("arm_embed");
 }
 else {
-	project.addDefine("arm_noembed");
-	project.addAssets("Assets/extra/*", { destination: "data/{name}" });
+	project.add_assets("assets/extra/*", { destination: "data/{name}" });
 }
 
-project.addDefine("arm_particles");
-// project.addDefine("arm_skin");
-// project.addDefine("arm_audio");
+if (flags.physics) {
+	project.add_define("arm_physics");
+}
+
+project.add_define("arm_particles");
+// project.add_define("arm_skin");
+// project.add_define("arm_audio");
 
 if (flags.android) {
-	project.addDefine("krom_android_rmb");
+	project.add_define("arm_android_rmb");
 }
 
 if (flags.raytrace) {
-	project.addAssets("Assets/raytrace/*", { destination: "data/{name}", embed: flags.snapshot });
+	project.add_assets("assets/raytrace/*", { destination: "data/{name}" });
 
 	if (flags.d3d12) {
-		project.addAssets("Shaders/raytrace/*.cso", { destination: "data/{name}", embed: flags.snapshot });
+		project.add_assets("shaders/raytrace/*.cso", { destination: "data/{name}" });
+		project.add_assets("assets/readme/readme_dxr.txt", { destination: "{name}" });
 	}
 	else if (flags.vulkan) {
-		project.addAssets("Shaders/raytrace/*.spirv", { destination: "data/{name}", embed: flags.snapshot });
+		project.add_assets("shaders/raytrace/*.spirv", { destination: "data/{name}" });
+		project.add_assets("assets/readme/readme_vkrt.txt", { destination: "{name}" });
 	}
 	else if (flags.metal) {
-		project.addAssets("Shaders/raytrace/*.metal", { destination: "data/{name}", embed: flags.snapshot });
+		project.add_assets("shaders/raytrace/*.metal", { destination: "data/{name}" });
 	}
 }
 
 if (flags.voxels) {
-	project.addDefine("arm_voxels");
+	project.add_define("arm_voxels");
 
-	if (process.platform === "win32") {
-		project.addShaders("Shaders/voxel_hlsl/*.glsl", { embed: flags.snapshot, noprocessing: true });
+	if (os_platform() === "win32") {
+		project.add_shaders("shaders/voxel_hlsl/*.glsl", { noprocessing: true });
 	}
 	else {
-		project.addShaders("Shaders/voxel_glsl/*.glsl", { embed: flags.snapshot });
+		project.add_shaders("shaders/voxel_glsl/*.glsl");
 	}
 }
 
 let export_version_info = true;
 if (export_version_info) {
-	const fs = require("fs");
 	let dir = "../" + flags.name.toLowerCase() + "/build";
-	let sha = require("child_process").execSync(`git log --pretty=format:"%h" -n 1`).toString().substr(1, 7);
+	let sha = os_popen(`git log --pretty=format:"%h" -n 1`).stdout.substr(1, 7);
 	let date = new Date().toISOString().split("T")[0];
 	let data = `{ "sha": "${sha}", "date": "${date}" }`;
-	fs.ensureDirSync(dir);
-	fs.writeFileSync(dir + "/version.json", data);
+	fs_ensuredir(dir);
+	fs_writefile(dir + "/version.json", data);
 	// Adds version.json to embed.txt list
-	project.addAssets(dir + "/version.json", { destination: "data/{name}", embed: flags.snapshot });
+	project.add_assets(dir + "/version.json", { destination: "data/{name}" });
 }
 
-resolve(project);
+project.flatten();
+return project;
