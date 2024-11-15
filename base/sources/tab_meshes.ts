@@ -10,8 +10,7 @@ function tab_meshes_draw(htab: ui_handle_t) {
 
 		///if (is_paint || is_sculpt)
 		if (config_raw.touch_ui) {
-			let row: f32[] = [1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
-			ui_row(row);
+			ui_row6();
 		}
 		else {
 			let row: f32[] = [1 / 14, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 14];
@@ -21,8 +20,7 @@ function tab_meshes_draw(htab: ui_handle_t) {
 
 		///if is_lab
 		if (config_raw.touch_ui) {
-			let row: f32[] = [1 / 7, 1 / 7, 1 / 7, 1 / 7, 1 / 7, 1 / 7, 1 / 7];
-			ui_row(row);
+			ui_row7();
 		}
 		else {
 			let row: f32[] = [1 / 14, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 14];
@@ -172,7 +170,6 @@ function tab_meshes_draw(htab: ui_handle_t) {
 	}
 }
 
-///if is_lab
 function tab_meshes_set_default_mesh(name: string) {
 	let mo: mesh_object_t = null;
 	if (name == ".Plane" || name == ".Sphere") {
@@ -212,4 +209,3 @@ function tab_meshes_set_default_mesh(name: string) {
 	render_path_raytrace_ready = false;
 	///end
 }
-///end

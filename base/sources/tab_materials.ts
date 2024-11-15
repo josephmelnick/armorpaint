@@ -1,5 +1,5 @@
 
-///if (is_paint || is_sculpt)
+let _tab_materials_draw_slots: i32;
 
 function tab_materials_draw(htab: ui_handle_t) {
 	let mini: bool = config_raw.layout[layout_size_t.SIDEBAR_W] <= ui_base_sidebar_mini_w;
@@ -48,12 +48,13 @@ function tab_materials_button_nodes() {
 	}
 }
 
-let _tab_materials_draw_slots: i32;
-
 function tab_materials_draw_slots(mini: bool) {
 	let ui: ui_t = ui_base_ui;
 	let slotw: i32 = math_floor(51 * ui_SCALE(ui));
 	let num: i32 = math_floor(config_raw.layout[layout_size_t.SIDEBAR_W] / slotw);
+	if (num == 0) {
+		return;
+	}
 
 	for (let row: i32 = 0; row < math_floor(math_ceil(project_materials.length / num)); ++row) {
 		let mult: i32 = config_raw.show_asset_names ? 2 : 1;
@@ -134,7 +135,7 @@ function tab_materials_draw_slots(mini: bool) {
 					context_select_material(i);
 					///if is_paint
 					if (context_raw.tool == workspace_tool_t.MATERIAL) {
-						app_notify_on_init(base_update_fill_layers);
+						app_notify_on_init(layers_update_fill_layers);
 					}
 					///end
 				}
@@ -161,7 +162,7 @@ function tab_materials_draw_slots(mini: bool) {
 
 					if (ui_menu_button(ui, tr("To Fill Layer"))) {
 						context_select_material(i);
-						base_create_fill_layer();
+						layers_create_fill_layer();
 					}
 
 					if (ui_menu_button(ui, tr("Export"))) {
@@ -324,7 +325,7 @@ function tab_materials_update_material() {
 	ui_nodes_group_stack = [];
 	make_material_parse_paint_material();
 	util_render_make_material_preview();
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+	let decal: bool = context_is_decal();
 	if (decal) {
 		util_render_make_decal_preview();
 	}
@@ -386,5 +387,3 @@ function tab_materials_delete_material(m: slot_material_t) {
 		tab_materials_update_material_pointers(m.canvas.nodes, i);
 	}
 }
-
-///end

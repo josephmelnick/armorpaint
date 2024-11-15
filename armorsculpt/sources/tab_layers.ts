@@ -76,7 +76,7 @@ function tab_layers_button_new(text: string) {
 		ui_menu_draw(function (ui: ui_t) {
 			let l: slot_layer_t = context_raw.layer;
 			if (ui_menu_button(ui, tr("Paint Layer"))) {
-				base_new_layer();
+				layers_new_layer();
 				history_new_layer();
 			}
 		});
@@ -198,10 +198,8 @@ function tab_layers_draw_layer_slot(l: slot_layer_t, i: i32, mini: bool) {
 function tab_layers_draw_layer_slot_mini(l: slot_layer_t, i: i32) {
 	let ui: ui_t = ui_base_ui;
 
-	let row: f32[] = [1, 1];
+	let row: f32[] = [1 / 1, 1 / 1];
 	ui_row(row);
-	let uix: i32 = ui._x;
-	let uiy: i32 = ui._y;
 	_ui_end_element();
 	_ui_end_element();
 
@@ -419,4 +417,7 @@ function tab_layers_can_drop_new_layer(position: i32): bool {
 		return false;
 	}
 	return true;
+}
+
+function tab_layers_make_mask_preview_rgba32(l: slot_layer_t) {
 }

@@ -1,6 +1,4 @@
 
-///if (is_paint || is_sculpt)
-
 let util_render_material_preview_size: i32 = 256;
 let util_render_decal_preview_size: i32 = 512;
 let util_render_layer_preview_size: i32 = 200;
@@ -21,7 +19,12 @@ function util_render_make_material_preview() {
 	context_raw.material.preview_ready = true;
 
 	context_raw.saved_camera = mat4_clone(scene_camera.base.transform.local);
-	let m: mat4_t = mat4_create(0.9146286343879498, -0.0032648027153306235, 0.404281837254303, 0.4659988049397712, 0.404295023959927, 0.007367569133732468, -0.9145989516155143, -1.0687517188018691, 0.000007410128652369705, 0.9999675337275382, 0.008058532943908717, 0.015935682577325486, 0, 0, 0, 1);
+	let m: mat4_t = mat4_create(
+		0.9146286343879498, -0.0032648027153306235, 0.404281837254303, 0.4659988049397712,
+		0.404295023959927, 0.007367569133732468, -0.9145989516155143, -1.0687517188018691,
+		0.000007410128652369705, 0.9999675337275382, 0.008058532943908717, 0.015935682577325486,
+		0, 0, 0, 1
+	);
 	transform_set_matrix(scene_camera.base.transform, m);
 	let saved_fov: f32 = scene_camera.data.fov;
 	scene_camera.data.fov = 0.92;
@@ -347,14 +350,11 @@ function util_render_make_brush_preview() {
 	camera_object_build_mat(scene_camera);
 
 	// Scale layer down to to image preview
-	if (base_pipe_merge == null) {
-		base_make_pipe();
-	}
 	l = render_path_paint_live_layer;
 	let target: image_t = context_raw.brush.image;
 	g2_begin(target);
 	g2_clear(0x00000000);
-	g2_set_pipeline(base_pipe_copy);
+	g2_set_pipeline(pipes_copy);
 	g2_draw_scaled_image(l.texpaint, 0, 0, target.width, target.height);
 	g2_set_pipeline(null);
 	g2_end();
@@ -463,5 +463,3 @@ function util_render_create_screen_aligned_full_data() {
 	}
 	g4_index_buffer_unlock(util_render_screen_aligned_full_ib);
 }
-
-///end

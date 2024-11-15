@@ -2,8 +2,12 @@
 let translator_translations: map_t<string, string> = map_create();
 // The font index is a value specific to font_cjk.ttc
 let translator_cjk_font_indices: map_t<string, i32> = null;
-
 let translator_last_locale: string = "en";
+let _translator_load_translations_cjk_font_path: string;
+let _translator_load_translations_cjk_font_disk_path: string;
+let _translator_init_font_cjk: bool;
+let _translator_init_font_font_path: string;
+let _translator_init_font_font_scale: f32;
 
 // Mark strings as localizable in order to be parsed by the extract_locale script
 // The string will not be translated to the currently selected locale though
@@ -31,9 +35,6 @@ function tr(id: string, vars: map_t<string, string> = null): string {
 
 	return translation;
 }
-
-let _translator_load_translations_cjk_font_path: string;
-let _translator_load_translations_cjk_font_disk_path: string;
 
 // (Re)loads translations for the specified locale
 function translator_load_translations(new_locale: string) {
@@ -87,14 +88,19 @@ function translator_load_translations(new_locale: string) {
 	let keys: string[] = map_keys(translator_translations);
 	for (let i: i32 = 0; i < keys.length; ++i) {
 		let s: string = map_get(translator_translations, keys[i]);
-		for (let i: i32 = 0; i < s.length; ++i) {
-			// Assume cjk in the > 1119 range for now
-			if (char_code_at(s, i) > 1119 && array_index_of(_g2_font_glyphs, char_code_at(s, i)) == -1) {
+
+		for (let i: i32 = 0; char_code_at(s, i) != 0; ) {
+			let l: i32 = 0;
+			let codepoint: i32 = string_utf8_decode((s) + i, ADDRESS(l));
+			i += l;
+
+			// Assume cjk in the > 1119 range
+			if (codepoint > 1119 && array_index_of(_g2_font_glyphs, codepoint) == -1) {
 				if (!cjk) {
 					_g2_font_glyphs = _g2_make_glyphs(32, 127);
 					cjk = true;
 				}
-				array_push(_g2_font_glyphs, char_code_at(s, i));
+				array_push(_g2_font_glyphs, codepoint);
 			}
 		}
 	}
@@ -135,12 +141,8 @@ function translator_load_translations(new_locale: string) {
 	}
 }
 
-let _translator_init_font_cjk: bool;
-let _translator_init_font_font_path: string;
-let _translator_init_font_font_scale: f32;
-
 function translator_init_font(cjk: bool, font_path: string, font_scale: f32) {
-	array_sort(_g2_font_glyphs, function (pa: u32_ptr, pb: u32_ptr): i32 {
+	i32_array_sort(_g2_font_glyphs, function (pa: u32_ptr, pb: u32_ptr): i32 {
 		let a: i32 = (i32)DEREFERENCE(pa);
 		let b: i32 = (i32)DEREFERENCE(pb);
 		return a - b;

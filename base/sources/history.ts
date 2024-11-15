@@ -3,13 +3,9 @@ let history_steps: step_t[];
 let history_undo_i: i32 = 0; // Undo layer
 let history_undos: i32 = 0; // Undos available
 let history_redos: i32 = 0; // Redos available
-///if (is_paint || is_sculpt)
 let history_push_undo: bool = false; // Store undo on next paint
 let history_undo_layers: slot_layer_t[] = null;
-///end
-///if is_sculpt
 let history_push_undo2: bool = false;
-///end
 
 function history_undo() {
 	if (history_undos > 0) {
@@ -19,8 +15,6 @@ function history_undo() {
 		if (step.name == tr("Edit Nodes")) {
 			history_swap_canvas(step);
 		}
-
-		///if (is_paint || is_sculpt)
 		else if (step.name == tr("New Layer") || step.name == tr("New Black Mask") || step.name == tr("New White Mask") || step.name == tr("New Fill Mask")) {
 			context_raw.layer = project_layers[step.layer];
 			slot_layer_delete(context_raw.layer);
@@ -142,7 +136,7 @@ function history_undo() {
 			// Now restore the applied mask
 			history_undo_i = history_undo_i - 1 < 0 ? config_raw.undo_steps - 1 : history_undo_i - 1;
 			let mask: slot_layer_t = history_undo_layers[history_undo_i];
-			base_new_mask(false, current_layer, mask_pos);
+			layers_new_mask(false, current_layer, mask_pos);
 			slot_layer_swap(context_raw.layer, mask);
 			context_raw.layers_preview_dirty = true;
 			context_set_layer(context_raw.layer);
@@ -158,7 +152,7 @@ function history_undo() {
 			let lay: slot_layer_t = history_undo_layers[history_undo_i];
 			context_set_layer(project_layers[step.layer]);
 			slot_layer_swap(context_raw.layer, lay);
-			base_new_mask(false, context_raw.layer);
+			layers_new_mask(false, context_raw.layer);
 			slot_layer_swap(context_raw.layer, lay);
 			context_raw.layer_preview_dirty = true;
 		}
@@ -221,13 +215,11 @@ function history_undo() {
 			slot_layer_swap(context_raw.layer, lay);
 			context_raw.layer_preview_dirty = true;
 		}
-		///end
 
 		history_undos--;
 		history_redos++;
 		context_raw.ddirty = 2;
 
-		///if (is_paint || is_sculpt)
 		ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
 		ui_base_hwnds[tab_area_t.SIDEBAR1].redraws = 2;
 		if (ui_view2d_show) {
@@ -238,7 +230,6 @@ function history_undo() {
 			// Refresh undo & redo buttons
 			ui_menubar_menu_handle.redraws = 2;
 		}
-		///end
 	}
 }
 
@@ -250,8 +241,6 @@ function history_redo() {
 		if (step.name == tr("Edit Nodes")) {
 			history_swap_canvas(step);
 		}
-
-		///if (is_paint || is_sculpt)
 		else if (step.name == tr("New Layer") || step.name == tr("New Black Mask") || step.name == tr("New White Mask") || step.name == tr("New Fill Mask")) {
 			let parent: slot_layer_t = step.layer_parent > 0 ? project_layers[step.layer_parent - 1] : null;
 			let l: slot_layer_t = slot_layer_create("", step.layer_type, parent);
@@ -277,7 +266,7 @@ function history_redo() {
 		}
 		else if (step.name == tr("New Group")) {
 			let l: slot_layer_t = project_layers[step.layer - 1];
-			let group: slot_layer_t = base_new_group();
+			let group: slot_layer_t = layers_new_group();
 			array_remove(project_layers, group);
 			array_insert(project_layers, step.layer, group);
 			l.parent = group;
@@ -313,7 +302,7 @@ function history_redo() {
 		else if (step.name == tr("Duplicate Layer")) {
 			context_raw.layer = project_layers[step.layer];
 			app_notify_on_next_frame(function () {
-				base_duplicate_layer(context_raw.layer);
+				layers_duplicate_layer(context_raw.layer);
 			});
 		}
 		else if (step.name == tr("Order Layers")) {
@@ -324,7 +313,7 @@ function history_redo() {
 		else if (step.name == tr("Merge Layers")) {
 			context_raw.layer = project_layers[step.layer + 1];
 			app_notify_on_init(history_redo_merge_layers);
-			app_notify_on_init(base_merge_down);
+			app_notify_on_init(layers_merge_down);
 		}
 		else if (step.name == tr("Apply Mask")) {
 			context_raw.layer = project_layers[step.layer];
@@ -355,7 +344,7 @@ function history_redo() {
 			let lay: slot_layer_t = history_undo_layers[history_undo_i];
 			context_set_layer(project_layers[step.layer]);
 			slot_layer_swap(context_raw.layer, lay);
-			base_new_mask(false, lay);
+			layers_new_mask(false, lay);
 			slot_layer_swap(context_raw.layer, lay);
 			context_raw.layer_preview_dirty = true;
 			history_undo_i = (history_undo_i + 1) % config_raw.undo_steps;
@@ -417,13 +406,11 @@ function history_redo() {
 			context_raw.layer_preview_dirty = true;
 			history_undo_i = (history_undo_i + 1) % config_raw.undo_steps;
 		}
-		///end
 
 		history_undos++;
 		history_redos--;
 		context_raw.ddirty = 2;
 
-		///if (is_paint || is_sculpt)
 		ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
 		ui_base_hwnds[tab_area_t.SIDEBAR1].redraws = 2;
 		if (ui_view2d_show) {
@@ -434,12 +421,10 @@ function history_redo() {
 			// Refresh undo & redo buttons
 			ui_menubar_menu_handle.redraws = 2;
 		}
-		///end
 	}
 }
 
 function history_reset() {
-	///if (is_paint || is_sculpt)
 	history_steps = [
 		{
 			name: tr("New", null),
@@ -451,35 +436,18 @@ function history_reset() {
 			brush: 0
 		}
 	];
-	///end
-	///if is_lab
-	history_steps = [
-		{
-			name: tr("New", null)
-		}
-	];
-	///end
-
 	history_undos = 0;
 	history_redos = 0;
 	history_undo_i = 0;
 }
 
-///if (is_paint || is_sculpt)
 function history_edit_nodes(canvas: ui_node_canvas_t, canvas_type: i32, canvas_group: i32 = -1) {
-///end
-///if is_lab
-function history_edit_nodes(canvas: ui_node_canvas_t, canvas_group: i32 = -1) {
-///end
 	let step: step_t = history_push(tr("Edit Nodes"));
 	step.canvas_group = canvas_group;
-	///if (is_paint || is_sculpt)
 	step.canvas_type = canvas_type;
-	///end
 	step.canvas = util_clone_canvas(canvas);
 }
 
-///if (is_paint || is_sculpt)
 function history_paint() {
 	let is_mask: bool = slot_layer_is_mask(context_raw.layer);
 	history_copy_to_undo(context_raw.layer.id, history_undo_i, is_mask);
@@ -620,7 +588,6 @@ function history_delete_material_group(group: node_group_t) {
 	step.canvas_group = array_index_of(project_material_groups, group);
 	step.canvas = util_clone_canvas(group.canvas);
 }
-///end
 
 function history_push(name: string): step_t {
 	///if (arm_windows || arm_linux || arm_macos)
@@ -661,16 +628,15 @@ function history_push(name: string): step_t {
 		layer_object: context_raw.layer.object_mask,
 		layer_blending: context_raw.layer.blending
 	};
-
-	array_push(history_steps, step);
 	///end
 
 	///if is_lab
 	let step: step_t = {
 		name: name
 	};
-	array_push(history_steps, step);
 	///end
+
+	array_push(history_steps, step);
 
 	while (history_steps.length > config_raw.undo_steps + 1) {
 		array_shift(history_steps);
@@ -678,7 +644,6 @@ function history_push(name: string): step_t {
 	return history_steps[history_steps.length - 1];
 }
 
-///if (is_paint || is_sculpt)
 function history_redo_merge_layers() {
 	history_copy_merging_layers();
 }
@@ -706,7 +671,6 @@ function history_swap_active() {
 }
 
 function history_copy_to_undo(from_id: i32, to_id: i32, is_mask: bool) {
-
 	///if is_sculpt
 	is_mask = true;
 	///end
@@ -727,32 +691,27 @@ function history_copy_to_undo(from_id: i32, to_id: i32, is_mask: bool) {
 	}
 	history_undo_i = (history_undo_i + 1) % config_raw.undo_steps;
 }
-///end
 
 function history_get_canvas(step: step_t): ui_node_canvas_t {
-	///if (is_paint || is_sculpt)
+	///if is_lab
+	return null;
+	///end
+
 	if (step.canvas_group == -1) {
 		return project_materials[step.material].canvas;
 	}
 	else {
 		return project_material_groups[step.canvas_group].canvas;
 	}
-	///end
-
-	///if is_lab
-	return null;
-	///end
 }
 
 function history_set_canvas(step: step_t, canvas: ui_node_canvas_t) {
-	///if (is_paint || is_sculpt)
 	if (step.canvas_group == -1) {
 		project_materials[step.material].canvas = canvas;
 	}
 	else {
 		project_material_groups[step.canvas_group].canvas = canvas;
 	}
-	///end
 }
 
 function history_swap_canvas(step: step_t) {
@@ -785,7 +744,6 @@ type step_t = {
 	name?: string;
 	canvas?: ui_node_canvas_t; // Node history
 	canvas_group?: i32;
-	///if (is_paint || is_sculpt)
 	layer?: i32;
 	layer_type?: layer_slot_type_t;
 	layer_parent?: i32;
@@ -797,5 +755,4 @@ type step_t = {
 	layer_blending?: i32;
 	prev_order?: i32; // Previous layer position
 	canvas_type?: i32;
-	///end
 };

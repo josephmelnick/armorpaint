@@ -3,6 +3,10 @@ let box_projects_htab: ui_handle_t = ui_handle_create();
 let box_projects_hsearch: ui_handle_t = ui_handle_create();
 let box_projects_icon_map: map_t<string, image_t> = null;
 
+let _box_projects_path: string;
+let _box_projects_icon_path: string;
+let _box_projects_i: i32;
+
 function box_projects_show() {
 	if (box_projects_icon_map != null) {
 		let keys: string[] = map_keys(box_projects_icon_map);
@@ -34,10 +38,6 @@ function box_projects_show() {
 
 	}, 600, 400, null, draggable);
 }
-
-let _box_projects_path: string;
-let _box_projects_icon_path: string;
-let _box_projects_i: i32;
 
 function box_projects_tab(ui: ui_t) {
 	if (ui_tab(box_projects_htab, tr("Projects"), true)) {
@@ -129,7 +129,6 @@ function box_projects_tab(ui: ui_t) {
 						ui._x = _uix;
 						///if (arm_android || arm_ios)
 						console_toast(tr("Opening project"));
-						iron_g4_swap_buffers();
 						///end
 						app_notify_on_init(function (path: string) {
 							ui_box_hide();
@@ -143,7 +142,7 @@ function box_projects_tab(ui: ui_t) {
 						_box_projects_icon_path = icon_path;
 						_box_projects_i = i;
 						ui_menu_draw(function (ui: ui_t) {
-							// if (menuButton(ui, tr("Duplicate"))) {}
+							// if (ui_menu_button(ui, tr("Duplicate"))) {}
 							if (ui_menu_button(ui, tr("Delete"))) {
 								app_notify_on_init(function () {
 									file_delete(_box_projects_path);
@@ -195,13 +194,12 @@ function box_projects_recent_tab(ui: ui_t) {
 
 		for (let i: i32 = 0; i < config_raw.recent_projects.length; ++i) {
 			let path: string = config_raw.recent_projects[i];
-			let file: string = path;
 			///if arm_windows
-			file = string_replace_all(path, "/", "\\");
+			path = string_replace_all(path, "/", "\\");
 			///else
-			file = string_replace_all(path, "\\", "/");
+			path = string_replace_all(path, "\\", "/");
 			///end
-			file = substring(file, string_last_index_of(file, path_sep) + 1, file.length);
+			let file: string = substring(path, string_last_index_of(path, path_sep) + 1, path.length);
 
 			if (string_index_of(to_lower_case(file), to_lower_case(box_projects_hsearch.text)) < 0) {
 				continue; // Search filter
@@ -230,7 +228,7 @@ function box_projects_recent_tab(ui: ui_t) {
 		ui.enabled = true;
 
 		_ui_end_element();
-		if (ui_button(tr("New .."), ui_align_t.LEFT)) {
+		if (ui_button(tr("New Project..."), ui_align_t.LEFT)) {
 			project_new_box();
 		}
 		if (ui_button(tr("Open..."), ui_align_t.LEFT)) {

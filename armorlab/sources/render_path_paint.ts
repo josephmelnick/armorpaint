@@ -1,4 +1,6 @@
 
+let render_path_paint_live_layer: slot_layer_t = null;
+let render_path_paint_live_layer_locked: bool = false;
 let render_path_paint_live_layer_drawn: i32 = 0; ////
 
 function render_path_paint_init() {
@@ -62,6 +64,7 @@ function render_path_paint_commands_paint(dilation: bool = true) {
 
 		if (context_raw.tool == workspace_tool_t.PICKER) {
 
+				let additional: string[] = ["texpaint_nor_picker", "texpaint_pack_picker", "texpaint_uv_picker"];
 				///if arm_metal
 				// render_path_set_target("texpaint_picker");
 				// render_path_clear_target(0xff000000);
@@ -69,9 +72,9 @@ function render_path_paint_commands_paint(dilation: bool = true) {
 				// render_path_clear_target(0xff000000);
 				// render_path_set_target("texpaint_pack_picker");
 				// render_path_clear_target(0xff000000);
-				render_path_set_target("texpaint_picker", ["texpaint_nor_picker", "texpaint_pack_picker", "texpaint_uv_picker"]);
+				render_path_set_target("texpaint_picker", additional);
 				///else
-				render_path_set_target("texpaint_picker", ["texpaint_nor_picker", "texpaint_pack_picker", "texpaint_uv_picker"]);
+				render_path_set_target("texpaint_picker", additional);
 				// render_path_clear_target(0xff000000);
 				///end
 				render_path_bind_target("gbuffer2", "gbuffer2");
@@ -82,14 +85,14 @@ function render_path_paint_commands_paint(dilation: bool = true) {
 				render_path_draw_meshes("paint");
 				ui_header_handle.redraws = 2;
 
-				let texpaint_picker: image_t = map_get(render_path_render_targets, "texpaint_picker")._image;
-				let texpaint_nor_picker: image_t = map_get(render_path_render_targets, "texpaint_nor_picker")._image;
-				let texpaint_pack_picker: image_t = map_get(render_path_render_targets, "texpaint_pack_picker")._image;
-				let texpaint_uv_picker: image_t = map_get(render_path_render_targets, "texpaint_uv_picker")._image;
-				let a: buffer_t = image_get_pixels(texpaint_picker);
-				let b: buffer_t = image_get_pixels(texpaint_nor_picker);
-				let c: buffer_t = image_get_pixels(texpaint_pack_picker);
-				let d: buffer_t = image_get_pixels(texpaint_uv_picker);
+				let texpaint_picker: render_target_t = map_get(render_path_render_targets, "texpaint_picker");
+				let texpaint_nor_picker: render_target_t = map_get(render_path_render_targets, "texpaint_nor_picker");
+				let texpaint_pack_picker: render_target_t = map_get(render_path_render_targets, "texpaint_pack_picker");
+				let texpaint_uv_picker: render_target_t = map_get(render_path_render_targets, "texpaint_uv_picker");
+				let a: buffer_t = image_get_pixels(texpaint_picker._image);
+				let b: buffer_t = image_get_pixels(texpaint_nor_picker._image);
+				let c: buffer_t = image_get_pixels(texpaint_pack_picker._image);
+				let d: buffer_t = image_get_pixels(texpaint_uv_picker._image);
 
 				if (context_raw.color_picker_callback != null) {
 					context_raw.color_picker_callback(context_raw.picked_color);
@@ -133,7 +136,8 @@ function render_path_paint_commands_paint(dilation: bool = true) {
 			render_path_bind_target("texpaint_blend0", "tex");
 			render_path_draw_shader("shader_datas/copy_pass/copyR8_pass");
 
-			render_path_set_target(texpaint, ["texpaint_nor" + tid, "texpaint_pack" + tid, "texpaint_blend0"]);
+			let additional: string[] = ["texpaint_nor" + tid, "texpaint_pack" + tid, "texpaint_blend0"];
+			render_path_set_target(texpaint, additional);
 
 			render_path_bind_target("_main", "gbufferD");
 
@@ -163,7 +167,7 @@ function render_path_paint_commands_cursor() {
 
 	let nodes: ui_nodes_t = ui_nodes_get_nodes();
 	let canvas: ui_node_canvas_t = ui_nodes_get_canvas(true);
-	let inpaint: bool = nodes.nodes_selected_id.length > 0 && ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]).type == "InpaintNode";
+	let inpaint: bool = nodes.nodes_selected_id.length > 0 && ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]).type == "inpaint_node";
 
 	if (!base_ui_enabled || base_is_dragging || !inpaint) {
 		return;
@@ -182,33 +186,35 @@ function render_path_paint_commands_cursor() {
 function render_path_paint_draw_cursor(mx: f32, my: f32, radius: f32, tint_r: f32 = 1.0, tint_g: f32 = 1.0, tint_b: f32 = 1.0) {
 	let plane: mesh_object_t = scene_get_child(".Plane").ext;
 	let geom: mesh_data_t = plane.data;
-	if (base_pipe_cursor == null) {
-		base_make_cursor_pipe();
-	}
 
 	render_path_set_target("");
-	g4_set_pipeline(base_pipe_cursor);
+	g4_set_pipeline(pipes_cursor);
 	let img: image_t = resource_get("cursor.k");
-	g4_set_tex(base_cursor_tex, img);
-	let gbuffer0: image_t = map_get(render_path_render_targets, "gbuffer0")._image;
-	g4_set_tex_depth(base_cursor_gbufferd, gbuffer0);
-	g4_set_float2(base_cursor_mouse, mx, my);
-	g4_set_float2(base_cursor_tex_step, 1 / gbuffer0.width, 1 / gbuffer0.height);
-	g4_set_float(base_cursor_radius, radius);
+	g4_set_tex(pipes_cursor_tex, img);
+	let gbuffer0: render_target_t = map_get(render_path_render_targets, "gbuffer0");
+	g4_set_tex_depth(pipes_cursor_gbufferd, gbuffer0._image);
+	g4_set_float2(pipes_cursor_mouse, mx, my);
+	g4_set_float2(pipes_cursor_tex_step, 1 / gbuffer0._image.width, 1 / gbuffer0._image.height);
+	g4_set_float(pipes_cursor_radius, radius);
 	let right: vec4_t = vec4_norm(camera_object_right_world(scene_camera));
-	g4_set_float3(base_cursor_camera_right, right.x, right.y, right.z);
-	g4_set_float3(base_cursor_tint, tint_r, tint_g, tint_b);
-	g4_set_mat(base_cursor_vp, scene_camera.vp);
+	g4_set_float3(pipes_cursor_camera_right, right.x, right.y, right.z);
+	g4_set_float3(pipes_cursor_tint, tint_r, tint_g, tint_b);
+	g4_set_mat(pipes_cursor_vp, scene_camera.vp);
 	let help_mat: mat4_t = mat4_identity();
 	help_mat = mat4_inv(scene_camera.vp);
-	g4_set_mat(base_cursor_inv_vp, help_mat);
+	g4_set_mat(pipes_cursor_inv_vp, help_mat);
 	///if (arm_metal || arm_vulkan)
-	let vs: vertex_structure_t[] = [{name: "tex", data: "short2norm"}];
+	let vs: vertex_element_t[] = [
+		{
+			name: "tex",
+			data: "short2norm"
+		}
+	];
 	g4_set_vertex_buffer(mesh_data_get(geom, vs));
 	///else
-	g4_set_vertex_buffer(geom._vertexBuffer);
+	g4_set_vertex_buffer(geom._.vertex_buffer);
 	///end
-	g4_set_index_buffer(geom._indexBuffers[0]);
+	g4_set_index_buffer(geom._.index_buffers[0]);
 	g4_draw();
 
 	g4_disable_scissor();
@@ -251,7 +257,8 @@ function render_path_paint_draw() {
 		render_path_set_target("texpaint_blend1");
 		render_path_clear_target(0x00000000);
 		///else
-		render_path_set_target("texpaint_blend0", ["texpaint_blend1"]);
+		let additional: string[] = ["texpaint_blend1"];
+		render_path_set_target("texpaint_blend0", additional);
 		render_path_clear_target(0x00000000);
 		///end
 	}
@@ -263,9 +270,9 @@ function render_path_paint_bind_layers() {
 	let canvas: ui_node_canvas_t = ui_nodes_get_canvas(true);
 	if (nodes.nodes_selected_id.length > 0) {
 		let node: ui_node_t = ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]);
-		let brush_node: logic_node_t = parser_logic_get_logic_node(node);
+		let brush_node: logic_node_ext_t = parser_logic_get_logic_node(node);
 		if (brush_node != null) {
-			image = logic_node_get_cached_image(brush_node);
+			image = logic_node_get_cached_image(brush_node.base);
 		}
 	}
 	if (image != null) {
@@ -285,7 +292,8 @@ function render_path_paint_bind_layers() {
 			t.format = "RGBA32";
 			map_set(render_path_render_targets, t.name, t);
 		}
-		map_get(render_path_render_targets, "texpaint_node")._image = image;
+		let texpaint_node_rt: render_target_t = map_get(render_path_render_targets, "texpaint_node");
+		texpaint_node_rt._image = image;
 		render_path_bind_target("texpaint_node", "texpaint");
 		render_path_bind_target("texpaint_nor_empty", "texpaint_nor");
 		render_path_bind_target("texpaint_pack_empty", "texpaint_pack");
@@ -293,9 +301,10 @@ function render_path_paint_bind_layers() {
 		let nodes: ui_nodes_t = ui_nodes_get_nodes();
 		let canvas: ui_node_canvas_t = ui_nodes_get_canvas(true);
 		let node: ui_node_t = ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]);
-		let inpaint: bool = node.type == "InpaintNode";
+		let inpaint: bool = node.type == "inpaint_node";
 		if (inpaint) {
-			map_get(render_path_render_targets, "texpaint_node_target")._image = inpaint_node_get_target();
+			let texpaint_node_target_rt: render_target_t = map_get(render_path_render_targets, "texpaint_node_target");
+			texpaint_node_target_rt._image = inpaint_node_get_target();
 		}
 	}
 	else {
@@ -307,4 +316,16 @@ function render_path_paint_bind_layers() {
 
 function render_path_paint_unbind_layers() {
 
+}
+
+function render_path_paint_use_live_layer(use: bool) {
+}
+
+function render_path_paint_set_plane_mesh() {
+}
+
+function render_path_paint_restore_plane_mesh() {
+}
+
+function render_path_paint_dilate(base: bool, nor_pack: bool) {
 }

@@ -1,6 +1,7 @@
 
 let _tab_swatches_empty: image_t;
 let tab_swatches_drag_pos: i32 = -1;
+let _tab_swatches_draw_i: i32;
 
 function tab_swatches_empty_set(image: image_t) {
 	_tab_swatches_empty = image;
@@ -18,8 +19,6 @@ function tab_swatches_empty_get(): image_t {
 	return _tab_swatches_empty;
 }
 
-let _tab_swatches_draw_i: i32;
-
 function tab_swatches_draw(htab: ui_handle_t) {
 	let ui: ui_t = ui_base_ui;
 	let statush: i32 = config_raw.layout[layout_size_t.STATUS_H];
@@ -28,7 +27,7 @@ function tab_swatches_draw(htab: ui_handle_t) {
 		ui_begin_sticky();
 		if (config_raw.touch_ui) {
 			let row: f32[] = [1 / 5, 1 / 5, 1 / 5, 1 / 5, 1 / 5];
-			ui_row(row);
+			ui_row5();
 		}
 		else {
 			let row: f32[] = [1 / 14, 1 / 14, 1 / 14, 1 / 14, 1 / 14];
@@ -175,7 +174,7 @@ function tab_swatches_draw(htab: ui_handle_t) {
 							if (ui.input_released) {
 								context_set_swatch(context_raw.swatch); // Trigger material preview update
 							}
-						}, math_floor(mouse_x - 200 * ui_SCALE(ui)), math_floor(mouse_y - 250 * ui_SCALE(ui)));
+						});
 					}
 
 					context_raw.select_time = time_time();
@@ -210,7 +209,7 @@ function tab_swatches_draw(htab: ui_handle_t) {
 						else if (ui_menu_button(ui, tr("Create Color Layer"))) {
 							let color: i32 = project_raw.swatches[i].base;
 							color = color_set_ab(color, project_raw.swatches[i].opacity * 255);
-							base_create_color_layer(color, project_raw.swatches[i].occlusion, project_raw.swatches[i].roughness, project_raw.swatches[i].metallic);
+							layers_create_color_layer(color, project_raw.swatches[i].occlusion, project_raw.swatches[i].roughness, project_raw.swatches[i].metallic);
 						}
 						///end
 					});

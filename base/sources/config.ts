@@ -96,9 +96,7 @@ function config_save() {
 	json_encode_bool("brush_angle_reject", config_raw.brush_angle_reject);
 	json_encode_i32("dilate", config_raw.dilate);
 	json_encode_i32("dilate_radius", config_raw.dilate_radius);
-	///if is_lab
 	json_encode_bool("gpu_inference", config_raw.gpu_inference);
-	///end
 	let config_json: string = json_encode_end();
 
 	let buffer: buffer_t = sys_string_to_buffer(config_json);
@@ -169,22 +167,23 @@ function config_init() {
 	ui_touch_hold = config_raw.touch_ui;
 	ui_touch_tooltip = config_raw.touch_ui;
 	base_res_handle.position = config_raw.layer_res;
-	config_load_keymap();
+	keymap_load();
 }
-
-type version_t = {
-	sha: string;
-	date: string;
-};
 
 function config_get_sha(): string {
 	let blob: buffer_t = data_get_blob("version.json");
+	if (blob == null) {
+		return "undefined";
+	}
 	let v: version_t = json_parse(sys_buffer_to_string(blob));
 	return v.sha;
 }
 
 function config_get_date(): string {
 	let blob: buffer_t = data_get_blob("version.json");
+	if (blob == null) {
+		return "undefined";
+	}
 	let v: version_t = json_parse(sys_buffer_to_string(blob));
 	return v.date;
 }
@@ -235,7 +234,7 @@ function config_import_from(from: config_t) {
 	config_raw.sha = _sha;
 	config_raw.version = _version;
 	ui_children = map_create(); // Reset ui handles
-	config_load_keymap();
+	keymap_load();
 	base_init_layout();
 	translator_load_translations(config_raw.locale);
 	config_apply();
@@ -256,34 +255,6 @@ function config_apply() {
 	if (g2_in_use) g2_end();
 	render_path_base_apply_config();
 	if (g2_in_use) g2_begin(current);
-}
-
-function config_load_keymap() {
-	config_keymap = base_get_default_keymap();
-	if (config_raw.keymap != "default.json") {
-		let blob: buffer_t = data_get_blob("keymap_presets/" + config_raw.keymap);
-		let new_keymap: map_t<string, string> = json_parse_to_map(sys_buffer_to_string(blob));
-		let keys: string[] = map_keys(new_keymap);
-		for (let i: i32 = 0; i < keys.length; ++i) {
-			let key: string = keys[i];
-			map_set(config_keymap, key, map_get(new_keymap, key));
-		}
-	}
-}
-
-function config_save_keymap() {
-	if (config_raw.keymap == "default.json") {
-		return;
-	}
-	let path: string = data_path() + "keymap_presets/" + config_raw.keymap;
-	let buffer: buffer_t = sys_string_to_buffer(config_keymap_to_json(config_keymap));
-	iron_file_save_bytes(path, buffer, 0);
-}
-
-function config_keymap_to_json(keymap: map_t<string, string>): string {
-	json_encode_begin();
-	json_encode_map(keymap);
-	return json_encode_end();
 }
 
 function config_get_super_sample_quality(f: f32): i32 {
@@ -381,6 +352,11 @@ function config_disable_plugin(f: string) {
 	plugin_stop(f);
 }
 
+type version_t = {
+	sha: string;
+	date: string;
+};
+
 type config_t = {
 	// The locale should be specified in ISO 639-1 format:
 	// https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
@@ -448,7 +424,5 @@ type config_t = {
 	dilate?: i32;
 	dilate_radius?: i32;
 
-	///if is_lab
 	gpu_inference?: bool;
-	///end
 };

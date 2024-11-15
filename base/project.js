@@ -12,12 +12,9 @@ flags.voxels = !flags.raytrace && !flags.android && !flags.ios;
 
 flags.with_d3dcompiler = true;
 flags.with_nfd = true;
-flags.with_tinydir = true;
-flags.with_zlib = true;
-flags.with_stb_image_write = true;
-flags.with_g2 = true;
+flags.with_compress = true;
+flags.with_image_write = true;
 flags.with_iron = true;
-flags.with_ui = true;
 flags.with_eval = true;
 
 let project = new Project("Base");
@@ -28,13 +25,13 @@ let project = new Project("Base");
 
 	if (graphics === "vulkan") {
 		project.add_define("KINC_VKRT");
-		project.add_project("../armorcore/tools/ashader/to_spirv");
+		project.add_project("../armorcore/tools/to_spirv");
 	}
 
 	if (flags.with_onnx) {
 		project.add_define("WITH_ONNX");
 		project.add_include_dir("../" + dir + "/onnx/include");
-		if (platform === "win32") {
+		if (platform === "windows") {
 			project.add_lib("../" + dir + "/onnx/win32/onnxruntime");
 		}
 		else if (platform === "linux") {
@@ -54,9 +51,10 @@ let project = new Project("Base");
 		}
 	}
 
-	project.add_define('WITH_PLUGINS');
+	project.add_define("WITH_PLUGINS");
 	project.add_cfiles("sources/plugin_api.c");
 	project.add_project("../" + dir + "/plugins");
+	project.add_project("plugins");
 }
 
 project.add_project("../armorcore");
@@ -109,11 +107,11 @@ if (flags.raytrace) {
 if (flags.voxels) {
 	project.add_define("arm_voxels");
 
-	if (os_platform() === "win32") {
-		project.add_shaders("shaders/voxel_hlsl/*.glsl", { noprocessing: true });
+	if (platform === "windows") {
+		project.add_assets("shaders/voxel_hlsl/*.d3d11", { destination: "data/{name}" });
 	}
 	else {
-		project.add_shaders("shaders/voxel_glsl/*.glsl");
+		project.add_shaders("shaders/voxel_glsl/*.glsl", { noprocessing: true });
 	}
 }
 
@@ -127,6 +125,23 @@ if (export_version_info) {
 	fs_writefile(dir + "/version.json", data);
 	// Adds version.json to embed.txt list
 	project.add_assets(dir + "/version.json", { destination: "data/{name}" });
+}
+
+let export_data_list = flags.android; // .apk contents
+if (export_data_list) {
+	let root = "../" + flags.name.toLowerCase();
+	let data_list = {
+		"/data/plugins": fs_readdir("../base/assets/plugins").concat(fs_readdir(root + "/assets/plugins")).join(","),
+		"/data/export_presets": fs_readdir(root + "/assets/export_presets").join(","),
+		"/data/keymap_presets": fs_readdir(root + "/assets/keymap_presets").join(","),
+		"/data/locale": fs_readdir("../base/assets/locale").join(","),
+		"/data/meshes": fs_readdir(root + "/assets/meshes").join(","),
+		"/data/themes": fs_readdir("../base/assets/themes").join(","),
+	};
+	let dir = "../" + flags.name.toLowerCase() + "/build";
+	fs_ensuredir(dir);
+	fs_writefile(dir + "/data_list.json", JSON.stringify(data_list));
+	project.add_assets(dir + "/data_list.json", { destination: "data/{name}" });
 }
 
 project.flatten();

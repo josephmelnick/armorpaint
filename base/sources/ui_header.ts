@@ -88,19 +88,13 @@ function ui_header_draw_tool_properties(ui: ui_t) {
 			if (slot_layer_is_mask(context_raw.layer)) {
 				context_set_layer(context_raw.layer.parent);
 			}
-			let m: slot_layer_t = base_new_mask(false, context_raw.layer);
+			let m: slot_layer_t = layers_new_mask(false, context_raw.layer);
 			app_notify_on_next_frame(function (m: slot_layer_t) {
-				if (base_pipe_merge == null) {
-					base_make_pipe();
-				}
-				if (const_data_screen_aligned_vb == null) {
-					const_data_create_screen_aligned_data();
-				}
 				g4_begin(m.texpaint);
-				g4_set_pipeline(base_pipe_colorid_to_mask);
+				g4_set_pipeline(pipes_colorid_to_mask);
 				let rt: render_target_t = map_get(render_path_render_targets, "texpaint_colorid");
-				g4_set_tex(base_texpaint_colorid, rt._image);
-				g4_set_tex(base_tex_colorid, project_get_image(project_assets[context_raw.colorid_handle.position]));
+				g4_set_tex(pipes_texpaint_colorid, rt._image);
+				g4_set_tex(pipes_tex_colorid, project_get_image(project_assets[context_raw.colorid_handle.position]));
 				g4_set_vertex_buffer(const_data_screen_aligned_vb);
 				g4_set_index_buffer(const_data_screen_aligned_ib);
 				g4_draw();
@@ -109,7 +103,7 @@ function ui_header_draw_tool_properties(ui: ui_t) {
 				ui_toolbar_handle.redraws = 1;
 				ui_header_handle.redraws = 1;
 				context_raw.layer_preview_dirty = true;
-				base_update_fill_layers();
+				layers_update_fill_layers();
 			}, m);
 			history_new_white_mask();
 		}
@@ -354,8 +348,8 @@ function ui_header_draw_tool_properties(ui: ui_t) {
 			 context_raw.tool == workspace_tool_t.SMUDGE ||
 			 context_raw.tool == workspace_tool_t.PARTICLE) {
 
-		let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
-		let decal_mask: bool = decal && operator_shortcut(map_get(config_keymap, "decal_mask"), shortcut_type_t.DOWN);
+		let decal: bool = context_is_decal();
+		let decal_mask: bool = context_is_decal_mask();
 		if (context_raw.tool != workspace_tool_t.FILL) {
 			if (decal_mask) {
 				context_raw.brush_decal_mask_radius = ui_slider(context_raw.brush_decal_mask_radius_handle, tr("Radius"), 0.01, 2.0, true);
@@ -618,7 +612,7 @@ function ui_header_draw_tool_properties(ui: ui_t) {
 
 		let nodes: ui_nodes_t = ui_nodes_get_nodes();
 		let canvas: ui_node_canvas_t = ui_nodes_get_canvas(true);
-		let inpaint: bool = nodes.nodes_selected_id.length > 0 && ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]).type == "InpaintNode";
+		let inpaint: bool = nodes.nodes_selected_id.length > 0 && ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]).type == "inpaint_node";
 		if (inpaint) {
 			context_raw.brush_radius = ui_slider(context_raw.brush_radius_handle, tr("Radius"), 0.01, 2.0, true);
 			if (ui.is_hovered) {

@@ -12,9 +12,9 @@ let photo_to_pbr_node_border_w: i32 = 64;
 let photo_to_pbr_node_tile_w: i32 = 2048;
 let photo_to_pbr_node_tile_with_border_w: i32 = photo_to_pbr_node_tile_w + photo_to_pbr_node_border_w * 2;
 
-function photo_to_pbr_node_create(arg: any): photo_to_pbr_node_t {
+function photo_to_pbr_node_create(raw: ui_node_t, args: f32_array_t): photo_to_pbr_node_t {
 	let n: photo_to_pbr_node_t = {};
-	n.base = logic_node_create();
+	n.base = logic_node_create(n);
 	n.base.get_as_image = photo_to_pbr_node_get_as_image;
 
 	if (photo_to_pbr_node_temp == null) {
@@ -48,7 +48,6 @@ function photo_to_pbr_node_get_as_image(self: photo_to_pbr_node_t, from: i32): i
 	photo_to_pbr_node_cached_source = source;
 
 	console_progress(tr("Processing") + " - " + tr("Photo to PBR"));
-	iron_g4_swap_buffers();
 
 	let tile_floats: f32_array_t[] = [];
 	let tiles_x: i32 = math_floor(config_get_texture_res_x() / photo_to_pbr_node_tile_w);
@@ -78,7 +77,8 @@ function photo_to_pbr_node_get_as_image(self: photo_to_pbr_node_t, from: i32): i
 		}
 
 		let model_blob: buffer_t = data_get_blob("models/photo_to_" + photo_to_pbr_node_model_names[from] + ".quant.onnx");
-		let buf: buffer_t = iron_ml_inference(model_blob, [f32a.buffer], null, null, config_raw.gpu_inference);
+		let tensors: buffer_t[] = [buffer_create_from_raw(f32a.buffer, f32a.length * 4)];
+		let buf: buffer_t = iron_ml_inference(model_blob, tensors, null, null, config_raw.gpu_inference);
 		let ar: f32_array_t = f32_array_create_from_buffer(buf);
 		u8a = u8_array_create(4 * photo_to_pbr_node_tile_w * photo_to_pbr_node_tile_w);
 		let offset_g: i32 = (from == channel_type_t.BASE_COLOR || from == channel_type_t.NORMAL_MAP) ? photo_to_pbr_node_tile_with_border_w * photo_to_pbr_node_tile_with_border_w : 0;
@@ -153,7 +153,7 @@ function photo_to_pbr_node_get_as_image(self: photo_to_pbr_node_t, from: i32): i
 		}
 		///end
 
-		let temp2: image_t = image_from_bytes(u8a.buffer, photo_to_pbr_node_tile_w, photo_to_pbr_node_tile_w);
+		let temp2: image_t = image_from_bytes(u8a, photo_to_pbr_node_tile_w, photo_to_pbr_node_tile_w);
 		g2_begin(photo_to_pbr_node_images[from]);
 		g2_draw_image(temp2, x * photo_to_pbr_node_tile_w, y * photo_to_pbr_node_tile_w);
 		g2_end();
@@ -166,7 +166,7 @@ function photo_to_pbr_node_get_as_image(self: photo_to_pbr_node_t, from: i32): i
 }
 
 ///if (arm_metal || arm_vulkan)
-function photo_to_pbr_node_bgra_swap(buffer: buffer_t) {
+function photo_to_pbr_node_bgra_swap(buffer: buffer_t): buffer_t {
 	let u8a: buffer_t = buffer;
 	for (let i: i32 = 0; i < math_floor(buffer.length / 4); ++i) {
 		let r: i32 = u8a[i * 4];

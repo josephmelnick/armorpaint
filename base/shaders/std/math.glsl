@@ -1,7 +1,4 @@
 
-#ifndef _MATH_GLSL_
-#define _MATH_GLSL_
-
 const float PI = 3.1415926535;
 const float PI2 = PI * 2.0;
 
@@ -9,7 +6,7 @@ vec2 envmap_equirect(const vec3 normal, const float angle) {
 	const float PI = 3.1415926535;
 	const float PI2 = PI * 2.0;
 	float phi = acos(normal.z);
-	float theta = atan(-normal.y, normal.x) + PI + angle;
+	float theta = atan2(normal.x, -normal.y) + PI + angle;
 	return vec2(theta / PI2, phi / PI);
 }
 
@@ -20,5 +17,3 @@ float rand(const vec2 co) { // Unreliable
 float attenuate(const float dist) {
 	return 1.0 / (dist * dist);
 }
-
-#endif

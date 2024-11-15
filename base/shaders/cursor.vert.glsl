@@ -8,36 +8,41 @@ uniform float radius;
 uniform vec3 camera_right;
 uniform sampler2D gbufferD;
 #ifdef HLSL
-uniform sampler2D texa; // direct3d12 unit align
+// direct3d12 unit align
+uniform sampler2D texa;
 #endif
 
+#ifdef HLSL
 in vec4 pos;
 in vec2 nor;
+#endif
 in vec2 tex;
 out vec2 tex_coord;
 
 vec3 get_pos(vec2 uv) {
-	#ifdef HLSL
+#ifdef HLSL
 	float keep = textureLod(texa, vec2(0.0, 0.0), 0.0).r; // direct3d12 unit align
 	float keep2 = pos.x + nor.x;
-	#endif
-	#if defined(HLSL) || defined(METAL) || defined(SPIRV)
-	float depth = textureLod(gbufferD, vec2(uv.x, 1.0 - uv.y), 0.0).r;
-	#else
+#endif
+
+#ifdef GLSL
 	float depth = textureLod(gbufferD, uv, 0.0).r;
-	#endif
+#else
+	float depth = textureLod(gbufferD, vec2(uv.x, 1.0 - uv.y), 0.0).r;
+#endif
+
 	vec4 wpos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-	wpos = invVP * wpos;
+	wpos = mul(wpos, invVP);
 	return wpos.xyz / wpos.w;
 }
 
 vec3 get_normal(vec3 p0, vec2 uv) {
-	vec3 p1 = get_pos(uv + vec2(tex_step.x * 4, 0));
-	vec3 p2 = get_pos(uv + vec2(0, tex_step.y * 4));
+	vec3 p1 = get_pos(uv + vec2(tex_step.x * 4.0, 0.0));
+	vec3 p2 = get_pos(uv + vec2(0.0, tex_step.y * 4.0));
 	return normalize(cross(p2 - p0, p1 - p0));
 }
 
-void create_basis(vec3 normal, out vec3 tangent, out vec3 binormal) {
+void create_basis(vec3 normal, OUT(vec3, tangent), OUT(vec3, binormal)) {
 	tangent = normalize(camera_right - normal * dot(camera_right, normal));
 	binormal = cross(tangent, normal);
 }
@@ -45,8 +50,8 @@ void create_basis(vec3 normal, out vec3 tangent, out vec3 binormal) {
 void main() {
 	tex_coord = tex;
 	vec3 wpos = get_pos(mouse);
-	vec2 uv1 = mouse + tex_step * 4;
-	vec2 uv2 = mouse - tex_step * 4;
+	vec2 uv1 = mouse + tex_step * vec2(4.0, 4.0);
+	vec2 uv2 = mouse - tex_step * vec2(4.0, 4.0);
 	vec3 wpos1 = get_pos(uv1);
 	vec3 wpos2 = get_pos(uv2);
 	vec3 n = normalize(
@@ -61,5 +66,5 @@ void main() {
 	else if (gl_VertexID == 1) wpos += normalize( n_tan - n_bin) * 0.7 * radius;
 	else if (gl_VertexID == 2) wpos += normalize( n_tan + n_bin) * 0.7 * radius;
 	else if (gl_VertexID == 3) wpos += normalize(-n_tan + n_bin) * 0.7 * radius;
-	gl_Position = VP * vec4(wpos, 1.0);
+	gl_Position = mul(vec4(wpos, 1.0), VP);
 }

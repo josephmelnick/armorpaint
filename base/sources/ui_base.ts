@@ -1,4 +1,9 @@
 
+type tab_draw_t = {
+	f: (h: ui_handle_t)=>void;
+};
+type tab_draw_array_t = tab_draw_t[];
+
 let ui_base_show: bool = true;
 let ui_base_ui: ui_t;
 let ui_base_border_started: i32 = 0;
@@ -7,52 +12,36 @@ let ui_base_action_paint_remap: string = "";
 let ui_base_operator_search_offset: i32 = 0;
 let ui_base_undo_tap_time: f32 = 0.0;
 let ui_base_redo_tap_time: f32 = 0.0;
-
 let ui_base_hwnds: ui_handle_t[] = ui_base_init_hwnds();
 let ui_base_htabs: ui_handle_t[] = ui_base_init_htabs();
-
-type tab_draw_t = {
-	f: (h: ui_handle_t)=>void;
-};
-type tab_draw_array_t = tab_draw_t[];
 let ui_base_hwnd_tabs: tab_draw_array_t[] = ui_base_init_hwnd_tabs();
 
-///if (is_paint || is_sculpt)
+///if is_lab
+let ui_base_default_sidebar_mini_w: i32 = 0;
+let ui_base_default_sidebar_full_w: i32 = 0;
+///else
 let ui_base_default_sidebar_mini_w: i32 = 56;
 let ui_base_default_sidebar_full_w: i32 = 280;
+///end
+
 ///if (arm_android || arm_ios)
 let ui_base_default_sidebar_w: i32 = ui_base_default_sidebar_mini_w;
 ///else
 let ui_base_default_sidebar_w: i32 = ui_base_default_sidebar_full_w;
 ///end
+
 let ui_base_tabx: i32 = 0;
 let ui_base_hminimized: ui_handle_t = ui_handle_create();
 let ui_base_sidebar_mini_w: i32 = ui_base_default_sidebar_mini_w;
-///end
+let _ui_base_operator_search_first: bool;
 
 function ui_base_init_hwnds(): ui_handle_t[] {
-	///if is_paint
 	let hwnds: ui_handle_t[] = [ui_handle_create(), ui_handle_create(), ui_handle_create()];
-	///end
-	///if is_sculpt
-	let hwnds: ui_handle_t[] = [ui_handle_create(), ui_handle_create(), ui_handle_create()];
-	///end
-	///if is_lab
-	let hwnds: ui_handle_t[] = [ui_handle_create()];
-	///end
 	return hwnds;
 }
 
 function ui_base_init_htabs(): ui_handle_t[] {
-	///if is_paint
 	let htabs: ui_handle_t[] = [ui_handle_create(), ui_handle_create(), ui_handle_create()];
-	///end
-	///if is_sculpt
-	let htabs: ui_handle_t[] = [ui_handle_create(), ui_handle_create(), ui_handle_create()];
-	///end
-	///if is_lab
-	let htabs: ui_handle_t[] = [ui_handle_create()];
-	///end
 	return htabs;
 }
 
@@ -62,9 +51,6 @@ function _draw_callback_create(f: (h: ui_handle_t)=>void): tab_draw_t {
 }
 
 function ui_base_init_hwnd_tabs(): tab_draw_array_t[] {
-
-	let r: tab_draw_array_t[] = [];
-
 	///if is_paint
 	let a0: tab_draw_array_t = [
 		_draw_callback_create(tab_layers_draw),
@@ -89,10 +75,6 @@ function ui_base_init_hwnd_tabs(): tab_draw_array_t[] {
 		_draw_callback_create(tab_console_draw),
 		_draw_callback_create(ui_status_draw_version_tab)
 	];
-
-	array_push(r, a0);
-	array_push(r, a1);
-	array_push(r, a2);
 	///end
 
 	///if is_sculpt
@@ -115,14 +97,12 @@ function ui_base_init_hwnd_tabs(): tab_draw_array_t[] {
 		_draw_callback_create(tab_console_draw),
 		_draw_callback_create(ui_status_draw_version_tab)
 	];
-
-	array_push(r, a0);
-	array_push(r, a1);
-	array_push(r, a2);
 	///end
 
 	///if is_lab
-	let a0: tab_draw_array_t = [
+	let a0: tab_draw_array_t = [];
+	let a1: tab_draw_array_t = [];
+	let a2: tab_draw_array_t = [
 		_draw_callback_create(tab_browser_draw),
 		_draw_callback_create(tab_textures_draw),
 		_draw_callback_create(tab_meshes_draw),
@@ -132,9 +112,12 @@ function ui_base_init_hwnd_tabs(): tab_draw_array_t[] {
 		_draw_callback_create(tab_console_draw),
 		_draw_callback_create(ui_status_draw_version_tab)
 	];
-	array_push(r, a0);
 	///end
 
+	let r: tab_draw_array_t[] = [];
+	array_push(r, a0);
+	array_push(r, a1);
+	array_push(r, a2);
 	return r;
 }
 
@@ -195,7 +178,7 @@ function ui_base_init() {
 	project_canvas = armpack_decode(project_default_canvas);
 	project_canvas.name = "Brush 1";
 
-	context_parse_brush_inputs();
+	brush_output_node_parse_inputs();
 
 	parser_logic_parse(project_canvas);
 	///end
@@ -224,7 +207,7 @@ function ui_base_init() {
 
 	let world: world_data_t = scene_world;
 	if (context_raw.saved_envmap == null) {
-		// raw.savedEnvmap = world._envmap;
+		// raw.saved_envmap = world._envmap;
 		context_raw.default_irradiance = world._.irradiance;
 		context_raw.default_radiance = world._.radiance;
 		context_raw.default_radiance_mipmaps = world._.radiance_mipmaps;
@@ -278,7 +261,7 @@ function ui_base_init() {
 	project_paint_objects = [context_raw.paint_object];
 
 	if (project_filepath == "") {
-		app_notify_on_init(base_init_layers);
+		app_notify_on_init(layers_init);
 	}
 
 	context_raw.project_objects = [];
@@ -349,12 +332,9 @@ function ui_base_update() {
 	else if (operator_shortcut(map_get(config_keymap, "file_new"))) {
 		project_new_box();
 	}
-	///if (is_paint || is_lab)
 	else if (operator_shortcut(map_get(config_keymap, "file_export_textures"))) {
 		if (context_raw.texture_export_path == "") { // First export, ask for path
-			///if is_paint
 			context_raw.layers_export = export_mode_t.VISIBLE;
-			///end
 			box_export_show_textures();
 		}
 		else {
@@ -364,12 +344,9 @@ function ui_base_update() {
 		}
 	}
 	else if (operator_shortcut(map_get(config_keymap, "file_export_textures_as"))) {
-		///if (is_paint || is_sculpt)
 		context_raw.layers_export = export_mode_t.VISIBLE;
-		///end
 		box_export_show_textures();
 	}
-	///end
 	else if (operator_shortcut(map_get(config_keymap, "file_import_assets"))) {
 		project_import_asset();
 	}
@@ -388,8 +365,8 @@ function ui_base_update() {
 	///end
 
 	///if (is_paint || is_sculpt)
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
-	let decal_mask: bool = decal && operator_shortcut(map_get(config_keymap, "decal_mask"), shortcut_type_t.DOWN);
+	let decal: bool = context_is_decal();
+	let decal_mask: bool = context_is_decal_mask();
 
 	if ((context_raw.brush_can_lock || context_raw.brush_locked) && mouse_moved) {
 		if (operator_shortcut(map_get(config_keymap, "brush_radius"), shortcut_type_t.DOWN) ||
@@ -748,7 +725,6 @@ function ui_base_update() {
 		}
 	}
 
-	///if (is_paint || is_sculpt)
 	if (ui_base_border_handle != null) {
 		if (ui_base_border_handle == ui_nodes_hwnd || ui_base_border_handle == ui_view2d_hwnd) {
 			if (ui_base_border_started == border_side_t.LEFT) {
@@ -797,38 +773,6 @@ function ui_base_update() {
 			}
 		}
 	}
-	///end
-
-	///if is_lab
-	if (ui_base_border_handle != null) {
-		if (ui_base_border_handle == ui_nodes_hwnd || ui_base_border_handle == ui_view2d_hwnd) {
-			if (ui_base_border_started == border_side_t.LEFT) {
-				config_raw.layout[layout_size_t.NODES_W] -= math_floor(mouse_movement_x);
-				if (config_raw.layout[layout_size_t.NODES_W] < 32) {
-					config_raw.layout[layout_size_t.NODES_W] = 32;
-				}
-				else if (config_raw.layout[layout_size_t.NODES_W] > sys_width() * 0.7) {
-					config_raw.layout[layout_size_t.NODES_W] = math_floor(sys_width() * 0.7);
-				}
-			}
-			else { // UINodes / UIView2D ratio
-				config_raw.layout[layout_size_t.NODES_H] -= math_floor(mouse_movement_y);
-				if (config_raw.layout[layout_size_t.NODES_H] < 32) {
-					config_raw.layout[layout_size_t.NODES_H] = 32;
-				}
-				else if (config_raw.layout[layout_size_t.NODES_H] > app_h() * 0.95) {
-					config_raw.layout[layout_size_t.NODES_H] = math_floor(app_h() * 0.95);
-				}
-			}
-		}
-		else if (ui_base_border_handle == ui_base_hwnds[tab_area_t.STATUS]) {
-			let my: i32 = math_floor(mouse_movement_y);
-			if (config_raw.layout[layout_size_t.STATUS_H] - my >= ui_status_default_status_h * config_raw.window_scale && config_raw.layout[layout_size_t.STATUS_H] - my < sys_height() * 0.7) {
-				config_raw.layout[layout_size_t.STATUS_H] -= my;
-			}
-		}
-	}
-	///end
 
 	if (!mouse_down()) {
 		ui_base_border_handle = null;
@@ -845,7 +789,8 @@ function ui_base_update() {
 		if (mouse_started()) {
 			if (context_raw.particle_timer != null) {
 				tween_stop(context_raw.particle_timer);
-				context_raw.particle_timer.done(context_raw.particle_timer.done_data);
+				let timer: tween_anim_t = context_raw.particle_timer;
+				timer.done(timer.done_data);
 				context_raw.particle_timer = null;
 			}
 			history_push_undo = true;
@@ -903,8 +848,6 @@ function ui_base_view_top() {
 		}
 	}
 }
-
-let _ui_base_operator_search_first: bool;
 
 function ui_base_operator_search() {
 	_ui_base_operator_search_first = true;
@@ -975,7 +918,6 @@ function ui_base_hit_rect(mx: f32, my: f32, x: i32, y: i32, w: i32, h: i32): boo
 	return mx > x && mx < x + w && my > y && my < y + h;
 }
 
-///if (is_paint || is_sculpt)
 function ui_base_get_brush_stencil_rect(): rect_t {
 	let w: i32 = math_floor(context_raw.brush_stencil_image.width * (base_h() / context_raw.brush_stencil_image.height) * context_raw.brush_stencil_scale);
 	let h: i32 = math_floor(base_h() * context_raw.brush_stencil_scale);
@@ -989,7 +931,6 @@ function ui_base_get_brush_stencil_rect(): rect_t {
 	};
 	return r;
 }
-///end
 
 function ui_base_update_ui() {
 	if (console_message_timer > 0) {
@@ -999,15 +940,12 @@ function ui_base_update_ui() {
 		}
 	}
 
-	///if (is_paint || is_sculpt)
 	ui_base_sidebar_mini_w = math_floor(ui_base_default_sidebar_mini_w * ui_SCALE(ui_base_ui));
-	///end
 
 	if (!base_ui_enabled) {
 		return;
 	}
 
-	///if (is_paint || is_sculpt)
 	// Same mapping for paint and rotate (predefined in touch keymap)
 	if (context_in_viewport()) {
 		if (mouse_started() && map_get(config_keymap, "action_paint") == map_get(config_keymap, "action_rotate")) {
@@ -1090,13 +1028,13 @@ function ui_base_update_ui() {
 		context_raw.brush_stencil_x += (old_w - new_w) / base_w() / 2;
 		context_raw.brush_stencil_y += (old_h - new_h) / base_h() / 2;
 	}
-	///end
 
 	let set_clone_source: bool = context_raw.tool == workspace_tool_t.CLONE && operator_shortcut(map_get(config_keymap, "set_clone_source") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN);
 
+	let decal: bool = context_is_decal();
+	let decal_mask: bool = context_is_decal_mask_paint();
+
 	///if (is_paint || is_sculpt)
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
-	let decal_mask: bool = decal && operator_shortcut(map_get(config_keymap, "decal_mask") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN);
 	let down: bool = operator_shortcut(map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN) ||
 					 decal_mask ||
 					 set_clone_source ||
@@ -1125,7 +1063,6 @@ function ui_base_update_ui() {
 	}
 	///end
 
-	///if (is_paint || is_sculpt)
 	///if arm_ios
 	// No hover on iPad, decals are painted by pen release
 	if (decal) {
@@ -1135,19 +1072,16 @@ function ui_base_update_ui() {
 		}
 	}
 	///end
-	///end
 
 	if (down) {
 		let mx: i32 = mouse_view_x();
 		let my: i32 = mouse_view_y();
 		let ww: i32 = app_w();
 
-		///if (is_paint || is_sculpt)
 		if (context_raw.paint2d) {
 			mx -= app_w();
 			ww = ui_view2d_ww;
 		}
-		///end
 
 		if (mx < ww &&
 			mx > app_x() &&
@@ -1170,7 +1104,6 @@ function ui_base_update_ui() {
 						context_raw.last_paint_vec_y = context_raw.last_paint_y;
 					}
 
-					///if (is_paint || is_sculpt)
 					history_push_undo = true;
 
 					if (context_raw.tool == workspace_tool_t.CLONE && context_raw.clone_start_x >= 0.0) { // Clone delta
@@ -1191,22 +1124,13 @@ function ui_base_update_ui() {
 					else if (context_raw.tool == workspace_tool_t.FILL && context_raw.fill_type_handle.position == fill_type_t.UV_ISLAND) {
 						util_uv_uvislandmap_cached = false;
 					}
-					///end
 				}
 
 				context_raw.brush_time += time_delta();
 
-				///if (is_paint || is_sculpt)
 				if (context_raw.run_brush != null) {
 					context_raw.run_brush(context_raw.brush_output_node_inst, 0);
 				}
-				///end
-				///if is_lab
-				if (context_run_brush != null) {
-					// context_run_brush(context_raw.brush_output_node_inst, 0);
-					context_run_brush(0);
-				}
-				///end
 			}
 		}
 	}
@@ -1214,72 +1138,69 @@ function ui_base_update_ui() {
 		context_raw.brush_time = 0;
 		context_raw.prev_paint_vec_x = -1;
 		context_raw.prev_paint_vec_y = -1;
-		///if (!arm_direct3d12 && !arm_vulkan && !arm_metal) // Keep accumulated samples for D3D12
+		///if (arm_opengl || arm_direct3d11) // Keep accumulated samples for D3D12
 		context_raw.ddirty = 3;
 		///end
 		context_raw.brush_blend_dirty = true; // Update brush mask
 
-		///if (is_paint || is_sculpt)
 		context_raw.layer_preview_dirty = true; // Update layer preview
-		///end
 
-		///if is_paint
 		// New color id picked, update fill layer
 		if (context_raw.tool == workspace_tool_t.COLORID && context_raw.layer.fill_layer != null) {
 			app_notify_on_next_frame(function () {
-				base_update_fill_layer();
+				layers_update_fill_layer();
 				make_material_parse_paint_material(false);
 			});
 		}
-		///end
 	}
 
-	///if is_paint
 	if (context_raw.layers_preview_dirty) {
 		context_raw.layers_preview_dirty = false;
 		context_raw.layer_preview_dirty = false;
 		context_raw.mask_preview_last = null;
-		if (base_pipe_merge == null) {
-			base_make_pipe();
-		}
 		// Update all layer previews
 		for (let i: i32 = 0; i < project_layers.length; ++i) {
 			let l: slot_layer_t = project_layers[i];
 			if (slot_layer_is_group(l)) {
 				continue;
 			}
+
 			let target: image_t = l.texpaint_preview;
+			if (target == null) {
+				continue;
+			}
+
 			let source: image_t = l.texpaint;
 			g2_begin(target);
 			g2_clear(0x00000000);
-			// g2_set_pipeline(l.isMask() ? base_pipe_copy8 : base_pipe_copy);
-			g2_set_pipeline(base_pipe_copy); // texpaint_preview is always RGBA32 for now
+			// g2_set_pipeline(l.is_mask() ? pipes_copy8 : pipes_copy);
+			g2_set_pipeline(pipes_copy); // texpaint_preview is always RGBA32 for now
 			g2_draw_scaled_image(source, 0, 0, target.width, target.height);
 			g2_set_pipeline(null);
 			g2_end();
 		}
 		ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
 	}
-	if (context_raw.layer_preview_dirty && !slot_layer_is_group(context_raw.layer)) {
+	if (context_raw.layer != null && context_raw.layer_preview_dirty && !slot_layer_is_group(context_raw.layer)) {
 		context_raw.layer_preview_dirty = false;
 		context_raw.mask_preview_last = null;
-		if (base_pipe_merge == null) {
-			base_make_pipe();
-		}
 		// Update layer preview
 		let l: slot_layer_t = context_raw.layer;
+
 		let target: image_t = l.texpaint_preview;
-		let source: image_t = l.texpaint;
-		g2_begin(target);
-		g2_clear(0x00000000);
-		// g2_set_pipeline(raw.layer.isMask() ? base_pipe_copy8 : base_pipe_copy);
-		g2_set_pipeline(base_pipe_copy); // texpaint_preview is always RGBA32 for now
-		g2_draw_scaled_image(source, 0, 0, target.width, target.height);
-		g2_set_pipeline(null);
-		g2_end();
-		ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
+		if (target != null) {
+
+			let source: image_t = l.texpaint;
+			g2_begin(target);
+			g2_clear(0x00000000);
+			// g2_set_pipeline(raw.layer.is_mask() ? pipes_copy8 : pipes_copy);
+			g2_set_pipeline(pipes_copy); // texpaint_preview is always RGBA32 for now
+			g2_draw_scaled_image(source, 0, 0, target.width, target.height);
+			g2_set_pipeline(null);
+			g2_end();
+			ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
+		}
 	}
-	///end
 
 	let undo_pressed: bool = operator_shortcut(map_get(config_keymap, "edit_undo"));
 	let redo_pressed: bool = operator_shortcut(map_get(config_keymap, "edit_redo")) ||
@@ -1366,7 +1287,6 @@ function ui_base_render() {
 	g2_begin(null);
 }
 
-///if (is_paint || is_sculpt)
 function ui_base_draw_sidebar() {
 	// Tabs
 	let mini: bool = config_raw.layout[layout_size_t.SIDEBAR_W] <= ui_base_sidebar_mini_w;
@@ -1445,11 +1365,9 @@ function ui_base_render_cursor() {
 		return;
 	}
 
-	///if is_paint
 	if (context_raw.tool == workspace_tool_t.MATERIAL || context_raw.tool == workspace_tool_t.BAKE) {
 		return;
 	}
-	///end
 
 	g2_set_color(0xffffffff);
 
@@ -1464,7 +1382,6 @@ function ui_base_render_cursor() {
 		my += context_raw.lock_started_y - sys_height() / 2;
 	}
 
-	///if is_paint
 	if (context_raw.brush_stencil_image != null &&
 		// @ts-ignore
 		context_raw.tool != workspace_tool_t.BAKE &&
@@ -1501,7 +1418,6 @@ function ui_base_render_cursor() {
 			g2_set_transformation(mat3_nan());
 		}
 	}
-	///end
 
 	// Show picked material next to cursor
 	if (context_raw.tool == workspace_tool_t.PICKER && context_raw.picker_select_material && context_raw.color_picker_callback == null) {
@@ -1528,10 +1444,10 @@ function ui_base_render_cursor() {
 		g2_set_color(0xffffffff);
 	}
 
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+	let decal: bool = context_is_decal();
 
 	if (!config_raw.brush_3d || context_in_2d_view() || decal) {
-		let decal_mask: bool = decal && operator_shortcut(map_get(config_keymap, "decal_mask"), shortcut_type_t.DOWN);
+		let decal_mask: bool = context_is_decal_mask();
 		if (decal && !context_in_nodes()) {
 			let decal_alpha: f32 = 0.5;
 			if (!decal_mask) {
@@ -1605,7 +1521,6 @@ function ui_base_render_cursor() {
 		g2_set_color(0xffffffff);
 	}
 }
-///end
 
 function ui_base_show_material_nodes() {
 	// Clear input state as ui receives input events even when not drawn
@@ -1622,7 +1537,6 @@ function ui_base_show_material_nodes() {
 	base_resize();
 }
 
-///if (is_paint || is_sculpt)
 function ui_base_show_brush_nodes() {
 	// Clear input state as ui receives input events even when not drawn
 	_ui_end_input(ui_nodes_ui);
@@ -1630,7 +1544,6 @@ function ui_base_show_brush_nodes() {
 	ui_nodes_canvas_type = canvas_type_t.BRUSH;
 	base_resize();
 }
-///end
 
 function ui_base_show_2d_view(type: view_2d_type_t) {
 	// Clear input state as ui receives input events even when not drawn
@@ -1667,7 +1580,6 @@ function ui_base_set_icon_scale() {
 function ui_base_on_border_hover(handle: ui_handle_t, side: i32) {
 	if (!base_ui_enabled) return;
 
-	///if (is_paint || is_sculpt)
 	if (handle != ui_base_hwnds[tab_area_t.SIDEBAR0] &&
 		handle != ui_base_hwnds[tab_area_t.SIDEBAR1] &&
 		handle != ui_base_hwnds[tab_area_t.STATUS] &&
@@ -1684,19 +1596,6 @@ function ui_base_on_border_hover(handle: ui_handle_t, side: i32) {
 	if (handle == ui_base_hwnds[tab_area_t.SIDEBAR0] && side == border_side_t.TOP) {
 		return;
 	}
-	///end
-
-	///if is_lab
-	if (handle != ui_base_hwnds[tab_area_t.STATUS] &&
-		handle != ui_nodes_hwnd &&
-		handle != ui_view2d_hwnd) return; // Scalable handles
-	if (handle == ui_view2d_hwnd && side != border_side_t.LEFT) {
-		return;
-	}
-	if (handle == ui_nodes_hwnd && side == border_side_t.TOP && !ui_view2d_show) {
-		return;
-	}
-	///end
 
 	if (handle == ui_nodes_hwnd && side != border_side_t.LEFT && side != border_side_t.TOP) {
 		return;
@@ -1759,9 +1658,7 @@ function ui_base_tag_ui_redraw() {
 	ui_base_hwnds[tab_area_t.STATUS].redraws = 2;
 	ui_menubar_workspace_handle.redraws = 2;
 	ui_menubar_menu_handle.redraws = 2;
-	///if (is_paint || is_sculpt)
 	ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
 	ui_base_hwnds[tab_area_t.SIDEBAR1].redraws = 2;
 	ui_toolbar_handle.redraws = 2;
-	///end
 }

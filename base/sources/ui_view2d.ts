@@ -1,19 +1,15 @@
 
-///if (is_paint || is_sculpt)
 let ui_view2d_pipe: pipeline_t;
 let ui_view2d_channel_loc: kinc_const_loc_t;
 let ui_view2d_text_input_hover: bool = false;
 let ui_view2d_uvmap_show: bool = false;
 let ui_view2d_tex_type: paint_tex_t = paint_tex_t.BASE;
 let ui_view2d_layer_mode: view_2d_layer_mode_t = view_2d_layer_mode_t.SELECTED;
-///end
-
 ///if (is_paint || is_sculpt)
 let ui_view2d_type: view_2d_type_t = view_2d_type_t.LAYER;
 ///else
 let ui_view2d_type: view_2d_type_t = view_2d_type_t.ASSET;
 ///end
-
 let ui_view2d_show: bool = false;
 let ui_view2d_wx: i32;
 let ui_view2d_wy: i32;
@@ -26,6 +22,11 @@ let ui_view2d_pan_y: f32 = 0.0;
 let ui_view2d_pan_scale: f32 = 1.0;
 let ui_view2d_tiled_show: bool = false;
 let ui_view2d_controls_down: bool = false;
+let _ui_view2d_render_tex: image_t;
+let _ui_view2d_render_x: f32;
+let _ui_view2d_render_y: f32;
+let _ui_view2d_render_tw: f32;
+let _ui_view2d_render_th: f32;
 
 function ui_view2d_init() {
 	///if (is_paint || is_sculpt)
@@ -55,12 +56,6 @@ function ui_view2d_init() {
 	ui_view2d_ui = ui_create(ops);
 	ui_view2d_ui.scroll_enabled = false;
 }
-
-let _ui_view2d_render_tex: image_t;
-let _ui_view2d_render_x: f32;
-let _ui_view2d_render_y: f32;
-let _ui_view2d_render_tw: f32;
-let _ui_view2d_render_th: f32;
 
 function ui_view2d_render() {
 
@@ -139,10 +134,8 @@ function ui_view2d_render() {
 		// Texture
 		let tex: image_t = null;
 
-		///if (is_paint || is_sculpt)
 		let l: slot_layer_t = context_raw.layer;
 		let channel: i32 = 0;
-		///end
 
 		let tw: f32 = ui_view2d_ww * 0.95 * ui_view2d_pan_scale;
 		let tx: f32 = ui_view2d_ww / 2 - tw / 2 + ui_view2d_pan_x;
@@ -161,15 +154,14 @@ function ui_view2d_render() {
 			let nodes: ui_nodes_t = ui_nodes_get_nodes();
 			if (nodes.nodes_selected_id.length > 0) {
 				let sel: ui_node_t = ui_get_node(ui_nodes_get_canvas(true).nodes, nodes.nodes_selected_id[0]);
-				let brush_node: logic_node_t = parser_logic_get_logic_node(sel);
+				let brush_node: logic_node_ext_t = parser_logic_get_logic_node(sel);
 				if (brush_node != null) {
-					tex = logic_node_get_cached_image(brush_node);
+					tex = logic_node_get_cached_image(brush_node.base);
 				}
 			}
 
 			///end
 		}
-		///if is_paint
 		else if (ui_view2d_type == view_2d_type_t.LAYER) {
 			let layer: slot_layer_t = l;
 
@@ -181,14 +173,14 @@ function ui_view2d_render() {
 				let current: image_t = _g2_current;
 				let g2_in_use: bool = _g2_in_use;
 				if (g2_in_use) g2_end();
-				layer = base_flatten();
+				layer = layers_flatten();
 				if (g2_in_use) g2_begin(current);
 			}
 			else if (slot_layer_is_group(layer)) {
 				let current: image_t = _g2_current;
 				let g2_in_use: bool = _g2_in_use;
 				if (g2_in_use) g2_end();
-				layer = base_flatten(false, slot_layer_get_children(layer));
+				layer = layers_flatten(false, slot_layer_get_children(layer));
 				if (g2_in_use) g2_begin(current);
 			}
 
@@ -212,7 +204,6 @@ function ui_view2d_render() {
 		else if (ui_view2d_type == view_2d_type_t.FONT) {
 			tex = context_raw.font.image;
 		}
-		///end
 
 		let th: f32 = tw;
 		if (tex != null) {
@@ -473,8 +464,8 @@ function ui_view2d_update() {
 	}
 
 	///if (is_paint || is_sculpt)
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
-	let decal_mask: bool = decal && operator_shortcut(map_get(config_keymap, "decal_mask") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN);
+	let decal: bool = context_is_decal();
+	let decal_mask: bool = context_is_decal_mask_paint();
 	let set_clone_source: bool = context_raw.tool == workspace_tool_t.CLONE && operator_shortcut(map_get(config_keymap, "set_clone_source") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN);
 
 	if (ui_view2d_type == view_2d_type_t.LAYER &&

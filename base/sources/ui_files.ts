@@ -1,4 +1,9 @@
 
+type draw_cloud_icon_data_t = {
+	f: string;
+	image: image_t;
+};
+
 let ui_files_default_path: string =
 	///if arm_windows
 	"C:\\Users"
@@ -20,6 +25,8 @@ let ui_files_icon_map: map_t<string, image_t> = null;
 let ui_files_selected: i32 = -1;
 let ui_files_show_extensions: bool = false;
 let ui_files_offline: bool = false;
+let _ui_files_file_browser_handle: ui_handle_t;
+let _ui_files_file_browser_f: string;
 
 function ui_files_show(filters: string, is_save: bool, open_multiple: bool, files_done: (s: string)=>void) {
 	if (is_save) {
@@ -63,20 +70,12 @@ function ui_files_release_keys() {
 	///end
 }
 
-let _ui_files_file_browser_handle: ui_handle_t;
-let _ui_files_file_browser_f: string;
-
-type draw_cloud_icon_data_t = {
-	f: string;
-	image: image_t;
-};
-
 function make_draw_cloud_icon_data(f: string, image: image_t): draw_cloud_icon_data_t {
 	let data: draw_cloud_icon_data_t = { f: f, image: image };
 	return data;
 }
 
-function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool = false, drag_files: bool = false, search: string = "", refresh: bool = false, context_menu: (s: string)=>void = null): string {
+function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, drag_files: bool = false, search: string = "", refresh: bool = false, context_menu: (s: string)=>void = null): string {
 
 	let icons: image_t = resource_get("icons.k");
 	let folder: rect_t = resource_tile50(icons, 2, 1);
@@ -88,7 +87,7 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 			ui_base_hwnds[tab_area_t.STATUS].redraws = 3;
 		});
 	}
-	if (is_cloud && file_read_directory("cloud", false).length == 0) {
+	if (is_cloud && file_read_directory("cloud").length == 0) {
 		return handle.text;
 	}
 
@@ -97,7 +96,10 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 	document_directory = substring(document_directory, 0, document_directory.length - 8); // Strip /"untitled"
 	///end
 
-	if (handle.text == "") handle.text = ui_files_default_path;
+	if (handle.text == "") {
+		handle.text = ui_files_default_path;
+	}
+
 	if (handle.text != ui_files_last_path || search != ui_files_last_search || refresh) {
 		ui_files_files = [];
 
@@ -119,7 +121,7 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 			dir_path = document_directory + dir_path;
 		}
 		///end
-		let files_all: string[] = file_read_directory(dir_path, folders_only);
+		let files_all: string[] = file_read_directory(dir_path);
 
 		for (let i: i32 = 0; i < files_all.length; ++i) {
 			let f: string = files_all[i];
@@ -205,9 +207,6 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 									let data: draw_cloud_icon_data_t = make_draw_cloud_icon_data(_ui_files_file_browser_f, image);
 
 									app_notify_on_init(function (data: draw_cloud_icon_data_t) {
-										if (base_pipe_copy_rgb == null) {
-											base_make_pipe_copy_rgb();
-										}
 										let icon: image_t = image_create_render_target(data.image.width, data.image.height);
 										if (ends_with(data.f, ".arm")) { // Used for material sphere alpha cutout
 											g2_begin(icon);
@@ -220,7 +219,7 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 											g2_begin(icon);
 											g2_clear(0xffffffff);
 										}
-										g2_set_pipeline(base_pipe_copy_rgb);
+										g2_set_pipeline(pipes_copy_rgb);
 										g2_draw_image(data.image, 0, 0);
 										g2_set_pipeline(null);
 										g2_end();
@@ -263,8 +262,7 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 
 					///if arm_ios
 					blob_path = document_directory + blob_path;
-					// TODO: implement native .arm parsing first
-					///else
+					///end
 
 					let buffer: buffer_t = iron_load_blob(blob_path);
 					let raw: project_format_t = armpack_decode(buffer);
@@ -272,8 +270,6 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 						let bytes_icon: any = raw.material_icons[0];
 						icon = image_from_bytes(lz4_decode(bytes_icon, 256 * 256 * 4), 256, 256);
 					}
-
-					///if (is_paint || is_sculpt)
 					else if (raw.mesh_icons != null) {
 						let bytes_icon: any = raw.mesh_icons[0];
 						icon = image_from_bytes(lz4_decode(bytes_icon, 256 * 256 * 4), 256, 256);
@@ -282,7 +278,6 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 						let bytes_icon: any = raw.brush_icons[0];
 						icon = image_from_bytes(lz4_decode(bytes_icon, 256 * 256 * 4), 256, 256);
 					}
-					///end
 
 					///if is_lab
 					if (raw.mesh_icon != null) {
@@ -292,7 +287,6 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 					///end
 
 					map_set(ui_files_icon_map, key, icon);
-					///end
 				}
 				if (icon != null) {
 					let w: i32 = 50;
@@ -435,9 +429,6 @@ function ui_files_file_browser(ui: ui_t, handle: ui_handle_t, folders_only: bool
 }
 
 function ui_files_make_icon (args: ui_files_make_icon_t) {
-	if (base_pipe_copy_rgb == null) {
-		base_make_pipe_copy_rgb();
-	}
 	let w: i32 = args.w;
 	let image: image_t = args.image;
 	let sw: i32 = image.width > image.height ? w : math_floor(1.0 * image.width / image.height * w);
@@ -445,7 +436,7 @@ function ui_files_make_icon (args: ui_files_make_icon_t) {
 	let icon: image_t = image_create_render_target(sw, sh);
 	g2_begin(icon);
 	g2_clear(0xffffffff);
-	g2_set_pipeline(base_pipe_copy_rgb);
+	g2_set_pipeline(pipes_copy_rgb);
 	g2_draw_scaled_image(image, 0, 0, sw, sh);
 	g2_set_pipeline(null);
 	g2_end();

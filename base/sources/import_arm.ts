@@ -1,10 +1,20 @@
 
+let scene_raw_gc: scene_t;
+
 function import_arm_run_project(path: string) {
 	let b: buffer_t = data_get_blob(path);
 	let project: project_format_t;
+	let import_as_mesh: bool = false;
 
 	if (import_arm_is_legacy(b)) {
 		project = import_arm_from_legacy(b);
+	}
+	else if (!import_arm_has_version(b)) {
+		import_as_mesh = true;
+		scene_raw_gc = armpack_decode(b);
+		project = {
+			mesh_datas: scene_raw_gc.mesh_datas
+		};
 	}
 	else {
 		project = armpack_decode(b);
@@ -26,14 +36,8 @@ function import_arm_run_project(path: string) {
 		}
 		return;
 	}
-
-	let import_as_mesh: bool = b[10] != 118; // 'v', no version
 	context_raw.layers_preview_dirty = true;
 	context_raw.layer_filter = 0;
-	///end
-
-	///if is_lab
-	let import_as_mesh: bool = true;
 	///end
 
 	project_new(import_as_mesh);
@@ -58,6 +62,9 @@ function import_arm_run_project(path: string) {
 	let recent_path: string = substring(path, string_last_index_of(path, "/") + 1, path.length);
 	///else
 	let recent_path: string = path;
+	///end
+	///if arm_windows
+	recent_path = string_replace_all(recent_path, "\\", "/");
 	///end
 	let recent: string[] = config_raw.recent_projects;
 	array_remove(recent, recent_path);
@@ -231,22 +238,15 @@ function import_arm_run_project(path: string) {
 		array_push(project_layers, l);
 
 		if (!is_group) {
-			if (base_pipe_merge == null) {
-				base_make_pipe();
-			}
-
 			let _texpaint: image_t = null;
-
-			///if is_paint
 			let _texpaint_nor: image_t = null;
 			let _texpaint_pack: image_t = null;
-			///end
 
 			if (is_mask) {
 				_texpaint = image_from_bytes(lz4_decode(ld.texpaint, ld.res * ld.res * 4), ld.res, ld.res, tex_format_t.RGBA32);
 				g2_begin(l.texpaint);
-				// g2_set_pipeline(base_pipe_copy8);
-				g2_set_pipeline(project.is_bgra ? base_pipe_copy_bgra : base_pipe_copy); // Full bits for undo support, R8 is used
+				// g2_set_pipeline(pipes_copy8);
+				g2_set_pipeline(project.is_bgra ? pipes_copy_bgra : pipes_copy); // Full bits for undo support, R8 is used
 				g2_draw_image(_texpaint, 0, 0);
 				g2_set_pipeline(null);
 				g2_end();
@@ -255,7 +255,7 @@ function import_arm_run_project(path: string) {
 				// TODO: create render target from bytes
 				_texpaint = image_from_bytes(lz4_decode(ld.texpaint, ld.res * ld.res * 4 * bytes_per_pixel), ld.res, ld.res, format);
 				g2_begin(l.texpaint);
-				g2_set_pipeline(project.is_bgra ? base_pipe_copy_bgra : base_pipe_copy);
+				g2_set_pipeline(project.is_bgra ? pipes_copy_bgra : pipes_copy);
 				g2_draw_image(_texpaint, 0, 0);
 				g2_set_pipeline(null);
 				g2_end();
@@ -263,14 +263,14 @@ function import_arm_run_project(path: string) {
 				///if is_paint
 				_texpaint_nor = image_from_bytes(lz4_decode(ld.texpaint_nor, ld.res * ld.res * 4 * bytes_per_pixel), ld.res, ld.res, format);
 				g2_begin(l.texpaint_nor);
-				g2_set_pipeline(project.is_bgra ? base_pipe_copy_bgra : base_pipe_copy);
+				g2_set_pipeline(project.is_bgra ? pipes_copy_bgra : pipes_copy);
 				g2_draw_image(_texpaint_nor, 0, 0);
 				g2_set_pipeline(null);
 				g2_end();
 
 				_texpaint_pack = image_from_bytes(lz4_decode(ld.texpaint_pack, ld.res * ld.res * 4 * bytes_per_pixel), ld.res, ld.res, format);
 				g2_begin(l.texpaint_pack);
-				g2_set_pipeline(project.is_bgra ? base_pipe_copy_bgra : base_pipe_copy);
+				g2_set_pipeline(project.is_bgra ? pipes_copy_bgra : pipes_copy);
 				g2_draw_image(_texpaint_pack, 0, 0);
 				g2_set_pipeline(null);
 				g2_end();
@@ -398,8 +398,7 @@ function import_arm_run_project(path: string) {
 	data_delete_blob(path);
 }
 
-///if (is_paint || is_sculpt)
-function import_arm_run_mesh(raw: scene_t) {
+function import_arm_run_mesh(raw: project_format_t) {
 	project_paint_objects = [];
 	for (let i: i32 = 0; i < raw.mesh_datas.length; ++i) {
 		let md: mesh_data_t = mesh_data_create(raw.mesh_datas[i]);
@@ -422,7 +421,7 @@ function import_arm_run_mesh(raw: scene_t) {
 		util_mesh_merge();
 		viewport_scale_to_bounds();
 	}
-	app_notify_on_init(base_init_layers);
+	app_notify_on_init(layers_init);
 	history_reset();
 }
 
@@ -469,7 +468,7 @@ function import_arm_run_material_from_project(project: project_format_t, path: s
 	let imported: slot_material_t[] = [];
 
 	for (let i: i32 = 0; i < project.material_nodes.length; ++i) {
-		let c: ui_node_canvas_t = project.material_nodes[i];
+		let c: ui_node_canvas_t = util_clone_canvas(project.material_nodes[i]); // project will get GCed
 		import_arm_init_nodes(c.nodes);
 		context_raw.material = slot_material_create(m0, c);
 		array_push(project_materials, context_raw.material);
@@ -479,7 +478,7 @@ function import_arm_run_material_from_project(project: project_format_t, path: s
 
 	if (project.material_groups != null) {
 		for (let i: i32 = 0; i < project.material_groups.length; ++i) {
-			let c: ui_node_canvas_t = project.material_groups[i];
+			let c: ui_node_canvas_t = util_clone_canvas(project.material_groups[i]);
 			while (import_arm_group_exists(c)) {
 				import_arm_rename_group(c.name, imported, project.material_groups); // Ensure unique group name
 			}
@@ -575,9 +574,9 @@ function import_arm_run_brush_from_project(project: project_format_t, path: stri
 	let imported: slot_brush_t[] = [];
 
 	for (let i: i32 = 0; i < project.brush_nodes.length; ++i) {
-		let n: ui_node_canvas_t = project.brush_nodes[i];
-		import_arm_init_nodes(n.nodes);
-		context_raw.brush = slot_brush_create(n);
+		let c: ui_node_canvas_t = util_clone_canvas(project.brush_nodes[i]);
+		import_arm_init_nodes(c.nodes);
+		context_raw.brush = slot_brush_create(c);
 		array_push(project_brushes, context_raw.brush);
 		array_push(imported, context_raw.brush);
 	}
@@ -586,6 +585,7 @@ function import_arm_run_brush_from_project(project: project_format_t, path: stri
 		for (let i: i32 = 0; i < imported.length; ++i) {
 			let b: slot_brush_t = imported[i];
 			context_set_brush(b);
+			make_material_parse_brush();
 			util_render_make_brush_preview();
 		}
 	}, imported);
@@ -593,7 +593,6 @@ function import_arm_run_brush_from_project(project: project_format_t, path: stri
 	ui_base_hwnds[tab_area_t.SIDEBAR1].redraws = 2;
 	data_delete_blob(path);
 }
-///end
 
 function import_arm_run_swatches(path: string, replace_existing: bool = false) {
 	let b: buffer_t = data_get_blob(path);
@@ -639,7 +638,7 @@ function import_arm_texture_node_name(): string {
 	///if (is_paint || is_sculpt)
 	return "TEX_IMAGE";
 	///else
-	return "ImageTextureNode";
+	return "image_texture_node";
 	///end
 }
 
@@ -821,6 +820,11 @@ function _import_arm_get_node_canvas_array(map: map_t<string, any>, key: string)
 		array_push(ar, c);
 	}
 	return ar;
+}
+
+function import_arm_has_version(b: buffer_t): bool {
+	let has_version: bool = b[10] == 118; // 'v';
+	return has_version;
 }
 
 function import_arm_is_legacy(b: buffer_t): bool {

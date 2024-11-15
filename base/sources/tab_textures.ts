@@ -76,6 +76,10 @@ function tab_textures_draw(htab: ui_handle_t) {
 
 					let asset: asset_t = project_assets[i];
 					let img: image_t = project_get_image(asset);
+					if (img == null) {
+						let empty_rt: render_target_t = map_get(render_path_render_targets, "empty_black");
+						img = empty_rt._image;
+					}
 					let uix: f32 = ui._x;
 					let uiy: f32 = ui._y;
 					let sw: i32 = img.height < img.width ? img.height : 0;
@@ -134,17 +138,9 @@ function tab_textures_draw(htab: ui_handle_t) {
 
 									app_notify_on_next_frame(function () {
 										let img: image_t = _tab_textures_draw_img;
-
-										///if (is_paint || is_sculpt)
-										if (base_pipe_merge == null) base_make_pipe();
-										///end
-										///if is_lab
-										if (base_pipe_copy == null) base_make_pipe();
-										///end
-
 										let target: image_t = image_create_render_target(tab_textures_to_pow2(img.width), tab_textures_to_pow2(img.height));
 										g2_begin(target);
-										g2_set_pipeline(base_pipe_copy);
+										g2_set_pipeline(pipes_copy);
 										g2_draw_scaled_image(img, 0, 0, target.width, target.height);
 										g2_set_pipeline(null);
 										g2_end();
@@ -170,7 +166,7 @@ function tab_textures_draw(htab: ui_handle_t) {
 							///if (is_paint || is_sculpt)
 							if (ui_menu_button(ui, tr("To Mask"))) {
 								app_notify_on_next_frame(function () {
-									base_create_image_mask(_tab_textures_draw_asset);
+									layers_create_image_mask(_tab_textures_draw_asset);
 								});
 							}
 							///end
@@ -270,14 +266,12 @@ function tab_textures_delete_texture(asset: asset_t) {
 	}
 	ui_base_hwnds[tab_area_t.STATUS].redraws = 2;
 
-	///if is_paint
 	if (context_raw.tool == workspace_tool_t.COLORID && i == context_raw.colorid_handle.position) {
 		ui_header_handle.redraws = 2;
 		context_raw.ddirty = 2;
 		context_raw.colorid_picked = false;
 		ui_toolbar_handle.redraws = 1;
 	}
-	///end
 
 	data_delete_image(asset.file);
 	map_delete(project_asset_map, asset.id);
@@ -292,11 +286,12 @@ function tab_textures_delete_texture(asset: asset_t) {
 		///end
 	});
 
+	///if (is_paint || is_sculpt)
 	for (let i: i32 = 0; i < project_materials.length; ++i) {
 		let m: slot_material_t = project_materials[i];
 		tab_textures_update_texture_pointers(m.canvas.nodes, i);
 	}
-	///if (is_paint || is_sculpt)
+
 	for (let i: i32 = 0; i < project_brushes.length; ++i) {
 		let b: slot_brush_t = project_brushes[i];
 		tab_textures_update_texture_pointers(b.canvas.nodes, i);

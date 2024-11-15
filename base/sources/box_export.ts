@@ -3,14 +3,36 @@ let box_export_htab: ui_handle_t = ui_handle_create();
 let box_export_files: string[] = null;
 let box_export_mesh_handle: ui_handle_t = ui_handle_create();
 
-///if (is_paint || is_lab)
 let box_export_hpreset: ui_handle_t = ui_handle_create();
 let box_export_preset: export_preset_t = null;
-let box_export_channels: string[] = ["base_r", "base_g", "base_b", "height", "metal", "nor_r", "nor_g", "nor_g_directx", "nor_b", "occ", "opac", "rough", "smooth", "emis", "subs", "0.0", "1.0"];
-let box_export_color_spaces: string[] = ["linear", "srgb"];
-///end
+let box_export_channels: string[] = [
+	"base_r",
+	"base_g",
+	"base_b",
+	"height",
+	"metal",
+	"nor_r",
+	"nor_g",
+	"nor_g_directx",
+	"nor_b",
+	"occ",
+	"opac",
+	"rough",
+	"smooth",
+	"emis",
+	"subs",
+	"0.0",
+	"1.0"
+];
+let box_export_color_spaces: string[] = [
+	"linear",
+	"srgb"
+];
 
-///if (is_paint || is_lab)
+let _box_export_bake_material: bool;
+let _box_export_t: export_preset_texture_t;
+let _box_export_apply_displacement: bool;
+
 function box_export_show_textures() {
 	ui_box_show_custom(function (ui: ui_t) {
 
@@ -35,9 +57,7 @@ function box_export_show_textures() {
 
 	}, 540, 310);
 }
-///end
 
-///if is_paint
 function box_export_show_bake_material() {
 	ui_box_show_custom(function (ui: ui_t) {
 
@@ -55,57 +75,36 @@ function box_export_show_bake_material() {
 
 	}, 540, 310);
 }
-///end
 
-let _box_export_bake_material: bool;
-
-///if (is_paint || is_lab)
 function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: bool = false) {
 	let tab_vertical: bool = config_raw.touch_ui;
 	if (ui_tab(box_export_htab, title, tab_vertical)) {
 
-		let row: f32[] = [0.5, 0.5];
-		ui_row(row);
+		ui_row2();
 
-		///if is_paint
 		///if (arm_android || arm_ios)
 		let base_res_combo: string[] = ["128", "256", "512", "1K", "2K", "4K"];
-		ui_combo(base_res_handle, base_res_combo, tr("Resolution"), true);
 		///else
 		let base_res_combo: string[] = ["128", "256", "512", "1K", "2K", "4K", "8K", "16K"];
-		ui_combo(base_res_handle, base_res_combo, tr("Resolution"), true);
-		///end
 		///end
 
-		///if is_lab
-		///if (arm_android || arm_ios)
-		let base_res_combo: string[] = ["2K", "4K"];
 		ui_combo(base_res_handle, base_res_combo, tr("Resolution"), true);
-		///else
-		let base_res_combo: string[] = ["2K", "4K", "8K", "16K"];
-		ui_combo(base_res_handle, base_res_combo, tr("Resolution"), true);
-		///end
-		///end
-
 		if (base_res_handle.changed) {
-			base_on_layers_resized();
+			layers_on_resized();
 		}
 
 		///if (is_lab || arm_android || arm_ios)
 		let base_bits_combo: string[] = ["8bit"];
-		ui_combo(base_bits_handle, base_bits_combo, tr("Color"), true);
 		///else
 		let base_bits_combo: string[] = ["8bit", "16bit", "32bit"];
+		///end
+
 		ui_combo(base_bits_handle, base_bits_combo, tr("Color"), true);
-		///end
-
-		///if is_paint
 		if (base_bits_handle.changed) {
-			app_notify_on_init(base_set_layer_bits);
+			app_notify_on_init(layers_set_bits);
 		}
-		///end
 
-		ui_row(row);
+		ui_row2();
 		if (base_bits_handle.position == texture_bits_t.BITS8) {
 			let h: ui_handle_t = ui_handle(__ID__);
 			if (h.init) {
@@ -123,16 +122,19 @@ function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: 
 			context_raw.format_type = ui_combo(h, format_combo, tr("Format"), true);
 		}
 
-		ui.enabled = context_raw.format_type == texture_ldr_format_t.JPG && base_bits_handle.position == texture_bits_t.BITS8;
+		ui.enabled = context_raw.format_type == texture_ldr_format_t.JPG &&
+					 base_bits_handle.position == texture_bits_t.BITS8;
+
 		let h_quality: ui_handle_t = ui_handle(__ID__);
 		if (h_quality.init) {
 			h_quality.value = context_raw.format_quality;
 		}
 		context_raw.format_quality = ui_slider(h_quality, tr("Quality"), 0.0, 100.0, true, 1);
+
 		ui.enabled = true;
 
 		///if is_paint
-		ui_row(row);
+		ui_row2();
 		ui.enabled = !bake_material;
 		let layers_export_handle: ui_handle_t = ui_handle(__ID__);
 		layers_export_handle.position = context_raw.layers_export;
@@ -148,12 +150,13 @@ function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: 
 
 		let layers_destination_handle: ui_handle_t = ui_handle(__ID__);
 		layers_destination_handle.position = context_raw.layers_destination;
+
 		let layers_destination_combo: string[] = [tr("Disk"), tr("Packed")];
 		context_raw.layers_destination = ui_combo(layers_destination_handle, layers_destination_combo, tr("Destination"), true);
 
 		_ui_end_element();
 
-		ui_row(row);
+		ui_row2();
 		if (ui_button(tr("Cancel"))) {
 			ui_box_hide();
 		}
@@ -163,12 +166,7 @@ function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: 
 				_box_export_bake_material = bake_material;
 				context_raw.texture_export_path = "/";
 				app_notify_on_init(function () {
-					///if is_paint
 					export_texture_run(context_raw.texture_export_path, _box_export_bake_material);
-					///end
-					///if is_lab
-					export_texture_run(context_raw.texture_export_path);
-					///end
 				});
 			}
 			else {
@@ -178,15 +176,9 @@ function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: 
 					context_raw.texture_export_path = path;
 					///if (arm_android || arm_ios)
 					console_toast(tr("Exporting textures"));
-					iron_g4_swap_buffers();
 					///end
 					app_notify_on_init(function () {
-						///if is_paint
 						export_texture_run(context_raw.texture_export_path, _box_export_bake_material);
-						///end
-						///if is_lab
-						export_texture_run(context_raw.texture_export_path);
-						///end
 					});
 				});
 			}
@@ -198,8 +190,6 @@ function box_export_tab_export_textures(ui: ui_t, title: string, bake_material: 
 		}
 	}
 }
-
-let _box_export_t: export_preset_texture_t;
 
 function box_export_tab_presets(ui: ui_t) {
 	let tab_vertical: bool = config_raw.touch_ui;
@@ -217,8 +207,7 @@ function box_export_tab_presets(ui: ui_t) {
 			ui_box_show_custom(function (ui: ui_t) {
 				let tab_vertical: bool = config_raw.touch_ui;
 				if (ui_tab(ui_handle(__ID__), tr("New Preset"), tab_vertical)) {
-					let row: f32[] = [0.5, 0.5];
-					ui_row(row);
+					ui_row2();
 					let h_preset: ui_handle_t = ui_handle(__ID__);
 					if (h_preset.init) {
 						h_preset.text = "new_preset";
@@ -262,8 +251,7 @@ function box_export_tab_presets(ui: ui_t) {
 
 		// Texture list
 		ui_separator(10, false);
-		row = [1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
-		ui_row(row);
+		ui_row6();
 		ui_text(tr("Texture"));
 		ui_text(tr("R"));
 		ui_text(tr("G"));
@@ -273,7 +261,7 @@ function box_export_tab_presets(ui: ui_t) {
 		ui.changed = false;
 		for (let i: i32 = 0; i < box_export_preset.textures.length; ++i) {
 			let t: export_preset_texture_t = box_export_preset.textures[i];
-			ui_row(row);
+			ui_row6();
 			let htex: ui_handle_t = ui_nest(box_export_hpreset, i);
 			htex.text = t.name;
 			t.name = ui_text_input(htex);
@@ -340,9 +328,7 @@ function box_export_tab_presets(ui: ui_t) {
 		}
 	}
 }
-///end
 
-///if is_paint
 function box_export_tab_atlases(ui: ui_t) {
 	let tab_vertical: bool = config_raw.touch_ui;
 	if (ui_tab(box_export_htab, tr("Atlases"), tab_vertical)) {
@@ -356,8 +342,7 @@ function box_export_tab_atlases(ui: ui_t) {
 			}
 		}
 		for (let i: i32 = 0; i < project_paint_objects.length; ++i) {
-			let row: f32[] = [1 / 2, 1 / 2];
-			ui_row(row);
+			ui_row2();
 			ui_text(project_paint_objects[i].base.name);
 			let hatlas: ui_handle_t = ui_nest(ui_handle(__ID__), i);
 			hatlas.position = project_atlas_objects[i];
@@ -365,7 +350,6 @@ function box_export_tab_atlases(ui: ui_t) {
 		}
 	}
 }
-///end
 
 function box_export_show_mesh() {
 	box_export_mesh_handle.position = context_raw.export_mesh_index;
@@ -375,14 +359,11 @@ function box_export_show_mesh() {
 	});
 }
 
-let _box_export_apply_displacement: bool;
-
 function box_export_tab_export_mesh(ui: ui_t, htab: ui_handle_t) {
 	let tab_vertical: bool = config_raw.touch_ui;
 	if (ui_tab(htab, tr("Export Mesh"), tab_vertical)) {
 
-		let row: f32[] = [1 / 2, 1 / 2];
-		ui_row(row);
+		ui_row2();
 
 		let h_export_mesh_format: ui_handle_t = ui_handle(__ID__);
 		if (h_export_mesh_format.init) {
@@ -419,7 +400,7 @@ function box_export_tab_export_mesh(ui: ui_t, htab: ui_handle_t) {
 		}
 		ui_text(tris + " " + tr("triangles"));
 
-		ui_row(row);
+		ui_row2();
 		if (ui_button(tr("Cancel"))) {
 			ui_box_hide();
 		}
@@ -437,7 +418,6 @@ function box_export_tab_export_mesh(ui: ui_t, htab: ui_handle_t) {
 				}
 				///if (arm_android || arm_ios)
 				console_toast(tr("Exporting mesh"));
-				iron_g4_swap_buffers();
 				///end
 
 				let paint_objects: mesh_object_t[];
@@ -455,7 +435,6 @@ function box_export_tab_export_mesh(ui: ui_t, htab: ui_handle_t) {
 	}
 }
 
-///if (is_paint || is_sculpt)
 function box_export_show_material() {
 	ui_box_show_custom(function (ui: ui_t) {
 		let htab: ui_handle_t = ui_handle(__ID__);
@@ -467,8 +446,7 @@ function box_export_show_material() {
 			h2.selected = context_raw.write_icon_on_export;
 			context_raw.pack_assets_on_export = ui_check(h1, tr("Pack Assets"));
 			context_raw.write_icon_on_export = ui_check(h2, tr("Export Icon"));
-			let row: f32[] = [0.5, 0.5];
-			ui_row(row);
+			ui_row2();
 			if (ui_button(tr("Cancel"))) {
 				ui_box_hide();
 			}
@@ -499,8 +477,7 @@ function box_export_show_brush() {
 			h2.selected = context_raw.write_icon_on_export;
 			context_raw.pack_assets_on_export = ui_check(h1, tr("Pack Assets"));
 			context_raw.write_icon_on_export = ui_check(h2, tr("Export Icon"));
-			let row: f32[] = [0.5, 0.5];
-			ui_row(row);
+			ui_row2();
 			if (ui_button(tr("Cancel"))) {
 				ui_box_hide();
 			}
@@ -517,9 +494,7 @@ function box_export_show_brush() {
 		}
 	});
 }
-///end
 
-///if (is_paint || is_lab)
 function box_export_fetch_presets() {
 	box_export_files = file_read_directory(path_data() + path_sep + "export_presets");
 	for (let i: i32 = 0; i < box_export_files.length; ++i) {
@@ -572,4 +547,3 @@ function box_export_preset_to_json(p: export_preset_t): string {
 	json_encode_end_array();
 	return json_encode_end();
 }
-///end

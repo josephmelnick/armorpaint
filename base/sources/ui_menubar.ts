@@ -4,10 +4,8 @@ let ui_menubar_workspace_handle: ui_handle_t = ui_handle_create();
 let ui_menubar_menu_handle: ui_handle_t = ui_handle_create();
 let ui_menubar_w: i32 = ui_menubar_default_w;
 
-///if is_lab
-let _ui_menubar_saved_camera: mat4_t = null;
+let _ui_menubar_saved_camera: mat4_t = mat4_nan();
 let _ui_menubar_plane: mesh_object_t = null;
-///end
 
 function ui_menubar_init() {
 	ui_menubar_workspace_handle.layout = ui_layout_t.HORIZONTAL;
@@ -138,16 +136,16 @@ function ui_menubar_render_ui() {
 			context_main_object().skip_context = null;
 
 			if (ui_header_worktab.position == space_type_t.SPACE3D) {
-				if (_ui_menubar_saved_camera != null) {
+				if (!mat4_isnan(_ui_menubar_saved_camera)) {
 					transform_set_matrix(scene_camera.base.transform, _ui_menubar_saved_camera);
-					_ui_menubar_saved_camera = null;
+					_ui_menubar_saved_camera = mat4_nan();
 				}
 				scene_meshes = [context_main_object()];
 			}
 			else { // Space2D
 				if (_ui_menubar_plane == null) {
 					let mesh: raw_mesh_t = geom_make_plane(1, 1, 2, 2);
-					let raw: raw_mesh_t = {
+					let raw: mesh_data_t = {
 						name: "2DView",
 						vertex_arrays: [
 							{
@@ -181,7 +179,7 @@ function ui_menubar_render_ui() {
 					array_remove(scene_meshes, _ui_menubar_plane);
 				}
 
-				if (_ui_menubar_saved_camera == null) {
+				if (mat4_isnan(_ui_menubar_saved_camera)) {
 					_ui_menubar_saved_camera = mat4_clone(scene_camera.base.transform.local);
 				}
 				scene_meshes = [_ui_menubar_plane];

@@ -43,15 +43,9 @@ type context_t = {
 	parse_vcols?: bool;
 
 	select_time?: f32;
-	///if (arm_direct3d12 || arm_vulkan || arm_metal)
 	pathtrace_mode?: path_trace_mode_t;
-	///end
 	viewport_mode?: viewport_mode_t;
-	///if (arm_android || arm_ios)
 	render_mode?: render_mode_t;
-	///else
-	render_mode?: render_mode_t;
-	///end
 
 	viewport_shader?: any; // JSValue * -> (ns: node_shader_t)=>void;
 	hscale_was_changed?: bool;
@@ -96,11 +90,7 @@ type context_t = {
 	hbloom?: ui_handle_t;
 	hsupersample?: ui_handle_t;
 	hvxao?: ui_handle_t;
-	///if is_forge
 	vxao_ext?: f32;
-	///else
-	vxao_ext?: f32;
-	///end
 	vxao_offset?: f32;
 	vxao_aperture?: f32;
 	texture_export_path?: string;
@@ -108,7 +98,6 @@ type context_t = {
 	camera_controls?: camera_controls_t;
 	pen_painting_only?: bool;
 
-	///if (is_paint || is_sculpt)
 	material?: slot_material_t;
 	layer?: slot_layer_t;
 	brush?: slot_brush_t;
@@ -162,17 +151,6 @@ type context_t = {
 	text_tool_image?: image_t;
 	text_tool_text?: string;
 	particle_material?: material_data_t;
-	///if arm_physics
-	particle_physics?: bool;
-	particle_hit_x?: f32;
-	particle_hit_y?: f32;
-	particle_hit_z?: f32;
-	last_particle_hit_x?: f32;
-	last_particle_hit_y?: f32;
-	last_particle_hit_z?: f32;
-	particle_timer?: tween_anim_t;
-	paint_body?: physics_body_t;
-	///end
 
 	layer_filter?: i32;
 	brush_output_node_inst?: brush_output_node_t;
@@ -232,12 +210,7 @@ type context_t = {
 	brush_scale?: f32;
 	brush_angle?: f32;
 	brush_angle_handle?: ui_handle_t;
-	///if is_paint
 	brush_hardness?: f32;
-	///end
-	///if is_sculpt
-	brush_hardness?: f32;
-	///end
 	brush_lazy_radius?: f32;
 	brush_lazy_step?: f32;
 	brush_lazy_x?: f32;
@@ -268,36 +241,34 @@ type context_t = {
 	last_htab0_pos?: i32;
 	maximized_sidebar_width?: i32;
 	drag_dest?: i32;
-	///end
-
-	///if is_lab
-	material?: any; ////
-	layer?: any; ////
-	tool?: workspace_tool_t;
-
-	color_picker_previous_tool?: workspace_tool_t;
-
-	brush_radius?: f32;
-	brush_radius_handle?: ui_handle_t;
-	brush_scale?: f32;
 
 	coords?: vec4_t;
 	start_x?: f32;
 	start_y?: f32;
 
-	// Brush ruler
 	lock_begin?: bool;
 	lock_x?: bool;
 	lock_y?: bool;
 	lock_start_x?: f32;
 	lock_start_y?: f32;
 	registered?: bool;
-	///end
 
-	///if is_forge
 	selected_object?: object_t;
+
+	///if arm_physics
+	particle_physics?: bool;
+	particle_hit_x?: f32;
+	particle_hit_y?: f32;
+	particle_hit_z?: f32;
+	last_particle_hit_x?: f32;
+	last_particle_hit_y?: f32;
+	last_particle_hit_z?: f32;
+	particle_timer?: tween_anim_t;
+	paint_body?: physics_body_t;
 	///end
 }
+
+let context_raw: context_t;
 
 function context_create(): context_t {
 	let c: context_t = {};
@@ -370,11 +341,7 @@ function context_create(): context_t {
 	c.brush_can_unlock = false;
 	c.camera_type = camera_type_t.PERSPECTIVE;
 	c.cam_handle = ui_handle_create();
-	///if is_forge
-	c.vxao_ext = 2.0;
-	///else
 	c.vxao_ext = 1.0;
-	///end
 	c.vxao_offset = 1.5;
 	c.vxao_aperture = 1.2;
 	c.texture_export_path = "";
@@ -382,8 +349,6 @@ function context_create(): context_t {
 	c.camera_controls = camera_controls_t.ORBIT;
 	c.pen_painting_only = false; // Reject painting with finger when using pen
 
-	///if (is_paint || is_sculpt)
-	c.tool = workspace_tool_t.BRUSH;
 	c.layer_preview_dirty = true;
 	c.layers_preview_dirty = false;
 	c.node_preview_dirty = false;
@@ -391,7 +356,6 @@ function context_create(): context_t {
 	c.colorid_picked = false;
 	c.material_preview = false; // Drawing material previews
 	c.saved_camera = mat4_identity();
-	c.color_picker_previous_tool = workspace_tool_t.BRUSH;
 	c.materialid_picked = 0;
 	c.uvx_picked = 0.0;
 	c.uvy_picked = 0.0;
@@ -452,9 +416,8 @@ function context_create(): context_t {
 	c.brush_nodes_angle = 0.0;
 	c.brush_nodes_hardness = 1.0;
 	c.brush_directional = false;
-	c.brush_radius = 0.5;
+
 	c.brush_radius_handle = ui_handle_create();
-	c.brush_radius_handle.value = 0.5;
 	c.brush_scale_x = 1.0;
 	c.brush_decal_mask_radius = 0.5;
 	c.brush_decal_mask_radius_handle = ui_handle_create();
@@ -469,12 +432,6 @@ function context_create(): context_t {
 	c.brush_angle = 0.0;
 	c.brush_angle_handle = ui_handle_create();
 	c.brush_angle_handle.value = 0.0;
-	///if is_paint
-	c.brush_hardness = 0.8;
-	///end
-	///if is_sculpt
-	c.brush_hardness = 0.05;
-	///end
 	c.brush_lazy_radius = 0.0;
 	c.brush_lazy_step = 0.0;
 	c.brush_lazy_x = 0.0;
@@ -502,46 +459,19 @@ function context_create(): context_t {
 	c.last_htab0_pos = 0;
 	c.maximized_sidebar_width = 0;
 	c.drag_dest = 0;
-	///end
-
-	///if is_lab
-	c.tool = workspace_tool_t.ERASER;
-	c.color_picker_previous_tool = workspace_tool_t.ERASER;
-	c.brush_radius = 0.25;
-	c.brush_radius_handle = ui_handle_create();
-	c.brush_radius_handle.value = 0.25;
-	c.brush_scale = 1.0;
-	c.coords = vec4_create();
-	c.start_x = 0.0;
-	c.start_y = 0.0;
-	c.lock_begin = false;
-	c.lock_x = false;
-	c.lock_y = false;
-	c.lock_start_x = 0.0;
-	c.lock_start_y = 0.0;
-	c.registered = false;
-	///end
 
 	return c;
 }
 
-let context_raw: context_t;
-
 function context_init() {
 	context_raw = context_create();
+	context_ext_init(context_raw);
 }
 
 function context_use_deferred(): bool {
-	///if is_paint
 	return context_raw.render_mode != render_mode_t.FORWARD && (context_raw.viewport_mode == viewport_mode_t.LIT || context_raw.viewport_mode == viewport_mode_t.PATH_TRACE) && context_raw.tool != workspace_tool_t.COLORID;
-	///end
-
-	///if (is_sculpt || is_lab)
-	return context_raw.render_mode != render_mode_t.FORWARD && (context_raw.viewport_mode == viewport_mode_t.LIT || context_raw.viewport_mode == viewport_mode_t.PATH_TRACE);
-	///end
 }
 
-///if (is_paint || is_sculpt)
 function context_select_material(i: i32) {
 	if (project_materials.length <= i) {
 		return;
@@ -560,7 +490,7 @@ function context_set_material(m: slot_material_t) {
 	ui_nodes_hwnd.redraws = 2;
 	ui_nodes_group_stack = [];
 
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+	let decal: bool = context_is_decal();
 	if (decal) {
 		app_notify_on_next_frame(util_render_make_decal_preview);
 	}
@@ -619,7 +549,7 @@ function context_set_layer(l: slot_layer_t) {
 	let g2_in_use: bool = _g2_in_use;
 	if (g2_in_use) g2_end();
 
-	base_set_object_mask();
+	layers_set_object_mask();
 	make_material_parse_mesh_material();
 	make_material_parse_paint_material();
 
@@ -628,7 +558,6 @@ function context_set_layer(l: slot_layer_t) {
 	ui_base_hwnds[tab_area_t.SIDEBAR0].redraws = 2;
 	ui_view2d_hwnd.redraws = 2;
 }
-///end
 
 function context_select_tool(i: i32) {
 	context_raw.tool = i;
@@ -639,16 +568,13 @@ function context_select_tool(i: i32) {
 	context_raw.viewport_mode = viewport_mode_t.MINUS_ONE;
 	context_set_viewport_mode(_viewport_mode);
 
-	///if (is_paint || is_sculpt)
 	context_init_tool();
 	ui_header_handle.redraws = 2;
 	ui_toolbar_handle.redraws = 2;
-	///end
 }
 
-///if (is_paint || is_sculpt)
 function context_init_tool() {
-	let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+	let decal: bool = context_is_decal();
 	if (decal) {
 		if (context_raw.tool == workspace_tool_t.TEXT) {
 			util_render_make_text_preview();
@@ -660,7 +586,6 @@ function context_init_tool() {
 		util_particle_init();
 		make_material_parse_particle_material();
 	}
-
 	else if (context_raw.tool == workspace_tool_t.BAKE) {
 		///if (arm_direct3d12 || arm_vulkan || arm_metal)
 		// Bake in lit mode for now
@@ -669,9 +594,8 @@ function context_init_tool() {
 		}
 		///end
 	}
-
 	else if (context_raw.tool == workspace_tool_t.MATERIAL) {
-		base_update_fill_layers();
+		layers_update_fill_layers();
 		context_main_object().skip_context = null;
 	}
 
@@ -680,37 +604,16 @@ function context_init_tool() {
 	config_raw.brush_live = decal;
 	///end
 }
-///end
 
 function context_select_paint_object(o: mesh_object_t) {
-	///if (is_paint || is_sculpt)
-	ui_header_handle.redraws = 2;
-	for (let i: i32 = 0; i < project_paint_objects.length; ++i) {
-		let p: mesh_object_t = project_paint_objects[i];
-		p.skip_context = "paint";
-	}
-	context_raw.paint_object = o;
-
-	let mask: i32 = slot_layer_get_object_mask(context_raw.layer);
-	if (context_layer_filter_used()) {
-		mask = context_raw.layer_filter;
-	}
-
-	if (context_raw.merged_object == null || mask > 0) {
-		context_raw.paint_object.skip_context = "";
-	}
-	util_uv_uvmap_cached = false;
-	util_uv_trianglemap_cached = false;
-	util_uv_dilatemap_cached = false;
-	///end
-
-	///if is_lab
-	context_raw.paint_object = o;
-	///end
+	context_ext_select_paint_object(o);
 }
 
 function context_main_object(): mesh_object_t {
-	///if (is_paint || is_sculpt)
+	///if is_lab
+	return project_paint_objects[0];
+	///end
+
 	for (let i: i32 = 0; i < project_paint_objects.length; ++i) {
 		let po: mesh_object_t = project_paint_objects[i];
 		if (po.base.children.length > 0) {
@@ -718,31 +621,22 @@ function context_main_object(): mesh_object_t {
 		}
 	}
 	return project_paint_objects[0];
-	///end
-
-	///if is_lab
-	return project_paint_objects[0];
-	///end
 }
 
 function context_layer_filter_used(): bool {
-	///if (is_paint || is_sculpt)
-	return context_raw.layer_filter > 0 && context_raw.layer_filter <= project_paint_objects.length;
-	///end
-
 	///if is_lab
 	return true;
 	///end
+
+	return context_raw.layer_filter > 0 && context_raw.layer_filter <= project_paint_objects.length;
 }
 
 function context_object_mask_used(): bool {
-	///if (is_paint || is_sculpt)
-	return slot_layer_get_object_mask(context_raw.layer) > 0 && slot_layer_get_object_mask(context_raw.layer) <= project_paint_objects.length;
-	///end
-
 	///if is_lab
 	return false;
 	///end
+
+	return slot_layer_get_object_mask(context_raw.layer) > 0 && slot_layer_get_object_mask(context_raw.layer) <= project_paint_objects.length;
 }
 
 function context_in_viewport(): bool {
@@ -751,18 +645,16 @@ function context_in_viewport(): bool {
 }
 
 function context_in_paint_area(): bool {
-	///if (is_paint || is_sculpt)
+	///if is_lab
+	return context_in_viewport();
+	///end
+
 	let right: i32 = app_w();
 	if (ui_view2d_show) {
 		right += ui_view2d_ww;
 	}
 	return mouse_view_x() > 0 && mouse_view_x() < right &&
 		   mouse_view_y() > 0 && mouse_view_y() < app_h();
-	///end
-
-	///if is_lab
-	return context_in_viewport();
-	///end
 }
 
 function context_in_layers(): bool {
@@ -775,13 +667,11 @@ function context_in_materials(): bool {
 	return tab == tr("Materials");
 }
 
-///if (is_paint || is_sculpt)
 function context_in_2d_view(type: view_2d_type_t = view_2d_type_t.LAYER): bool {
 	return ui_view2d_show && ui_view2d_type == type &&
 		   mouse_x > ui_view2d_wx && mouse_x < ui_view2d_wx + ui_view2d_ww &&
 		   mouse_y > ui_view2d_wy && mouse_y < ui_view2d_wy + ui_view2d_wh;
 }
-///end
 
 function context_in_nodes(): bool {
 	return ui_nodes_show &&
@@ -799,6 +689,22 @@ function context_in_browser(): bool {
 	return tab == tr("Browser");
 }
 
+function context_is_picker(): bool {
+	return context_raw.tool == workspace_tool_t.PICKER || context_raw.tool == workspace_tool_t.MATERIAL;
+}
+
+function context_is_decal(): bool {
+	return context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+}
+
+function context_is_decal_mask(): bool {
+	return context_is_decal() && operator_shortcut(map_get(config_keymap, "decal_mask"), shortcut_type_t.DOWN);
+}
+
+function context_is_decal_mask_paint(): bool {
+	return context_is_decal() && operator_shortcut(map_get(config_keymap, "decal_mask") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN);
+}
+
 function context_get_area_type(): area_type_t {
 	if (context_in_viewport()) {
 		return area_type_t.VIEWPORT;
@@ -809,7 +715,6 @@ function context_get_area_type(): area_type_t {
 	if (context_in_browser()) {
 		return area_type_t.BROWSER;
 	}
-	///if (is_paint || is_sculpt)
 	if (context_in_2d_view()) {
 		return area_type_t.VIEW2D;
 	}
@@ -819,7 +724,6 @@ function context_get_area_type(): area_type_t {
 	if (context_in_materials()) {
 		return area_type_t.MATERIALS;
 	}
-	///end
 	return area_type_t.MINUS_ONE;
 }
 
@@ -897,113 +801,3 @@ function context_enable_import_plugin(file: string): bool {
 function context_set_swatch(s: swatch_color_t) {
 	context_raw.swatch = s;
 }
-
-///if is_lab
-function context_run_brush(from: i32) {
-	let left: f32 = 0.0;
-	let right: f32 = 1.0;
-
-	// First time init
-	if (context_raw.last_paint_x < 0 || context_raw.last_paint_y < 0) {
-		context_raw.last_paint_vec_x = context_raw.paint_vec.x;
-		context_raw.last_paint_vec_y = context_raw.paint_vec.y;
-	}
-
-	let nodes: ui_nodes_t = ui_nodes_get_nodes();
-	let canvas: ui_node_canvas_t = ui_nodes_get_canvas(true);
-	let inpaint: bool = nodes.nodes_selected_id.length > 0 && ui_get_node(canvas.nodes, nodes.nodes_selected_id[0]).type == "InpaintNode";
-
-	// Paint bounds
-	if (inpaint &&
-		context_raw.paint_vec.x > left &&
-		context_raw.paint_vec.x < right &&
-		context_raw.paint_vec.y > 0 &&
-		context_raw.paint_vec.y < 1 &&
-		!base_is_dragging &&
-		!base_is_resizing &&
-		!base_is_scrolling() &&
-		!base_is_combo_selected()) {
-
-		let down: bool = mouse_down() || pen_down();
-
-		// Prevent painting the same spot
-		let same_spot: bool = context_raw.paint_vec.x == context_raw.last_paint_x && context_raw.paint_vec.y == context_raw.last_paint_y;
-		if (down && same_spot) {
-			context_raw.painted++;
-		}
-		else {
-			context_raw.painted = 0;
-		}
-		context_raw.last_paint_x = context_raw.paint_vec.x;
-		context_raw.last_paint_y = context_raw.paint_vec.y;
-
-		if (context_raw.painted == 0) {
-			context_parse_brush_inputs();
-		}
-
-		if (context_raw.painted <= 1) {
-			context_raw.pdirty = 1;
-			context_raw.rdirty = 2;
-		}
-	}
-}
-
-function context_parse_brush_inputs() {
-	if (!context_raw.registered) {
-		context_raw.registered = true;
-		app_notify_on_update(context_update);
-	}
-
-	context_raw.paint_vec = context_raw.coords;
-}
-
-function context_update() {
-	let paint_x: f32 = mouse_view_x() / app_w();
-	let paint_y: f32 = mouse_view_y() / app_h();
-	if (mouse_started()) {
-		context_raw.start_x = mouse_view_x() / app_w();
-		context_raw.start_y = mouse_view_y() / app_h();
-	}
-
-	if (pen_down()) {
-		paint_x = pen_view_x() / app_w();
-		paint_y = pen_view_y() / app_h();
-	}
-	if (pen_started()) {
-		context_raw.start_x = pen_view_x() / app_w();
-		context_raw.start_y = pen_view_y() / app_h();
-	}
-
-	if (operator_shortcut(map_get(config_keymap, "brush_ruler") + "+" + map_get(config_keymap, "action_paint"), shortcut_type_t.DOWN)) {
-		if (context_raw.lock_x) {
-			paint_x = context_raw.start_x;
-		}
-		if (context_raw.lock_y) {
-			paint_y = context_raw.start_y;
-		}
-	}
-
-	context_raw.coords.x = paint_x;
-	context_raw.coords.y = paint_y;
-
-	if (context_raw.lock_begin) {
-		let dx: i32 = math_abs(context_raw.lock_start_x - mouse_view_x());
-		let dy: i32 = math_abs(context_raw.lock_start_y - mouse_view_y());
-		if (dx > 1 || dy > 1) {
-			context_raw.lock_begin = false;
-			dx > dy ? context_raw.lock_y = true : context_raw.lock_x = true;
-		}
-	}
-
-	if (keyboard_started(map_get(config_keymap, "brush_ruler"))) {
-		context_raw.lock_start_x = mouse_view_x();
-		context_raw.lock_start_y = mouse_view_y();
-		context_raw.lock_begin = true;
-	}
-	else if (keyboard_released(map_get(config_keymap, "brush_ruler"))) {
-		context_raw.lock_x = context_raw.lock_y = context_raw.lock_begin = false;
-	}
-
-	context_parse_brush_inputs();
-}
-///end

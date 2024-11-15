@@ -3,9 +3,9 @@ type separate_vector_node_t = {
 	base?: logic_node_t;
 };
 
-function separate_vector_node_create(args: f32_array_t): separate_vector_node_t {
+function separate_vector_node_create(raw: ui_node_t, args: f32_array_t): separate_vector_node_t {
 	let n: separate_vector_node_t = {};
-	n.base = logic_node_create();
+	n.base = logic_node_create(n);
 	n.base.get = separate_vector_node_get;
 	return n;
 }

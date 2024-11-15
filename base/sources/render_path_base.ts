@@ -12,6 +12,8 @@ let render_path_base_voxels_created: bool = false;
 ///end
 
 function render_path_base_init() {
+	pipes_init();
+	const_data_create_screen_aligned_data();
 	render_path_base_super_sample = config_raw.rp_supersample;
 }
 
@@ -110,7 +112,7 @@ function render_path_base_begin() {
 			camera_views[context_raw.view_index_last].v = mat4_clone(cam.base.transform.local);
 		}
 
-		let decal: bool = context_raw.tool == workspace_tool_t.DECAL || context_raw.tool == workspace_tool_t.TEXT;
+		let decal: bool = context_is_decal();
 
 		if (context_raw.view_index_last != context_raw.view_index || decal || !config_raw.brush_3d) {
 			// Redraw on current viewport change
@@ -194,11 +196,7 @@ function render_path_base_commands(draw_commands: ()=>void) {
 
 	///if (arm_direct3d12 || arm_vulkan || arm_metal)
 	if (context_raw.viewport_mode ==  viewport_mode_t.PATH_TRACE) {
-		///if is_paint
 		let use_live_layer: bool = context_raw.tool == workspace_tool_t.MATERIAL;
-		///else
-		let use_live_layer: bool = false;
-		///end
 		render_path_raytrace_draw(use_live_layer);
 		return;
 	}
@@ -265,11 +263,7 @@ function render_path_base_draw_split(draw_commands: ()=>void) {
 		render_path_base_draw_gbuffer();
 
 		///if (arm_direct3d12 || arm_vulkan || arm_metal)
-		///if is_paint
 		let use_live_layer: bool = context_raw.tool == workspace_tool_t.MATERIAL;
-		///else
-		let use_live_layer: bool = false;
-		///end
 		context_raw.viewport_mode == viewport_mode_t.PATH_TRACE ? render_path_raytrace_draw(use_live_layer) : draw_commands();
 		///else
 		draw_commands();
